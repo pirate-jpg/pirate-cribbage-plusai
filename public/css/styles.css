@@ -1,0 +1,504 @@
+:root{
+  --bg0:#071a26;
+  --panel:#0b2a3bdd;
+  --line:#ffffff22;
+  --text:#f6f1df;
+  --muted:#c8c2ad;
+  --gold:#d7b46a;
+  --amber:#e3a018;
+  --danger:#d24a3a;
+  --shadow: 0 18px 60px #00000066;
+
+  /* Rope + wood palette */
+  --ropeA:#d6b47c;
+  --ropeB:#b88c50;
+  --ropeShadow:#00000055;
+  --wood0:#3a2a1d;
+  --wood1:#2a1d14;
+  --wood2:#1f140e;
+}
+
+*{ box-sizing:border-box; }
+html,body{ height:100%; }
+body{
+  margin:0;
+  color:var(--text);
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  background:
+    radial-gradient(1200px 600px at 40% 0%, #103c52 0%, var(--bg0) 55%),
+    radial-gradient(900px 600px at 75% 70%, #0b2f43 0%, var(--bg0) 70%);
+}
+
+/* =========================
+   Rope border utility
+   ========================= */
+.ropeFrame{
+  position:relative;
+  border-radius:18px;
+}
+.ropeFrame::before{
+  content:"";
+  position:absolute;
+  inset:-10px;
+  border-radius:22px;
+  pointer-events:none;
+
+  /* A braided rope look using layered repeating gradients */
+  background:
+    /* outer shadow */
+    radial-gradient(closest-side, transparent 72%, var(--ropeShadow) 100%),
+
+    /* braid strands */
+    repeating-linear-gradient(
+      45deg,
+      #0000 0 6px,
+      #0000 6px,
+      rgba(0,0,0,0.20) 6px 8px,
+      #0000 8px 16px
+    ),
+    repeating-linear-gradient(
+      -45deg,
+      #0000 0 6px,
+      #0000 6px,
+      rgba(255,255,255,0.10) 6px 8px,
+      #0000 8px 16px
+    ),
+
+    /* rope base */
+    linear-gradient(180deg, var(--ropeA) 0%, var(--ropeB) 100%);
+
+  /* cut out the middle so it becomes a border */
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+
+  padding:10px;
+  filter: drop-shadow(0 10px 18px rgba(0,0,0,0.55));
+}
+
+/* =========================
+   Top bar
+   ========================= */
+.topbar{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:12px 16px;
+  border-bottom:1px solid var(--line);
+  background: linear-gradient(180deg, #0a2a3a 0%, #071a26 100%);
+}
+.brand{ display:flex; align-items:baseline; gap:10px; }
+.anchor{ font-size:20px; color:var(--gold); }
+.title{ font-weight:800; font-size:20px; letter-spacing:0.5px; }
+.subtitle{ font-size:12px; color:var(--muted); margin-left:8px; }
+
+.topmeta{ display:flex; gap:10px; }
+.chip{
+  border:1px solid var(--line);
+  padding:6px 10px;
+  border-radius:999px;
+  font-size:12px;
+  color:var(--muted);
+  background:#00000022;
+}
+
+/* =========================
+   Layout
+   ========================= */
+.page{ padding:18px; }
+.grid{
+  display:grid;
+  grid-template-columns: 360px 1fr;
+  grid-template-rows: auto auto;
+  gap:18px;
+  align-items:start;
+}
+.boardPanel{ grid-column:1; grid-row:1; }
+.crewPanel{ grid-column:1; grid-row:2; }
+.playPanel{ grid-column:2; grid-row:1 / span 2; }
+
+@media (max-width: 1100px){
+  .grid{ grid-template-columns: 1fr; grid-template-rows: auto; }
+  .boardPanel, .crewPanel, .playPanel{ grid-column:auto; grid-row:auto; }
+}
+
+.panel{
+  background: linear-gradient(180deg, rgba(11,47,67,0.80) 0%, rgba(7,31,45,0.82) 100%);
+  border:1px solid var(--line);
+  border-radius:18px;
+  box-shadow: var(--shadow);
+  padding:16px;
+}
+.panelHeader{ display:flex; flex-direction:column; gap:4px; margin-bottom:12px; }
+.panelHeader h2{ margin:0; font-size:18px; }
+.mutedSmall{ color:var(--muted); font-size:12px; }
+.spread{ flex-direction:row; align-items:center; justify-content:space-between; }
+
+.miniRow{ display:flex; gap:8px; flex-wrap:wrap; margin:10px 0 14px; }
+.pill{
+  padding:6px 10px;
+  border-radius:999px;
+  border:1px solid var(--line);
+  background:#00000022;
+  color:var(--muted);
+  font-size:12px;
+}
+.scoreBlock{
+  margin-top:12px;
+  padding:12px;
+  border-radius:14px;
+  border:1px solid var(--line);
+  background:#00000018;
+}
+.scoreTitle{ font-size:12px; color:var(--muted); margin-bottom:6px; }
+.scoreText{ font-size:16px; font-weight:900; }
+
+/* =========================
+   Cribbage board: more realistic wood + edge + subtle grain
+   ========================= */
+.woodFrame{
+  position:relative;
+  border-radius:18px;
+  border:1px solid rgba(255,255,255,0.12);
+  padding:14px;
+
+  /* deeper wood base */
+  background:
+    radial-gradient(900px 600px at 30% 20%, rgba(255,255,255,0.05) 0%, rgba(0,0,0,0.00) 55%),
+    radial-gradient(900px 600px at 70% 90%, rgba(0,0,0,0.35) 0%, rgba(0,0,0,0.00) 55%),
+    linear-gradient(180deg, rgba(0,0,0,0.35) 0%, rgba(0,0,0,0.05) 45%, rgba(0,0,0,0.25) 100%),
+    linear-gradient(90deg, var(--wood0) 0%, var(--wood1) 40%, var(--wood2) 100%);
+
+  box-shadow: 0 20px 70px rgba(0,0,0,0.55);
+}
+
+/* Rope border applied to board */
+.boardPanel{
+  position:relative;
+}
+.boardPanel.ropeFrame{ /* optional if you later add class in HTML */ }
+
+/* We can apply rope to board without HTML change by attaching to woodFrame */
+.woodFrame::before{
+  content:"";
+  position:absolute;
+  inset:-10px;
+  border-radius:22px;
+  pointer-events:none;
+
+  background:
+    radial-gradient(closest-side, transparent 72%, rgba(0,0,0,0.55) 100%),
+    repeating-linear-gradient(
+      45deg,
+      rgba(255,255,255,0.10) 0 2px,
+      rgba(0,0,0,0.00) 2px 10px
+    ),
+    repeating-linear-gradient(
+      -45deg,
+      rgba(0,0,0,0.20) 0 2px,
+      rgba(0,0,0,0.00) 2px 10px
+    ),
+    linear-gradient(180deg, var(--ropeA) 0%, var(--ropeB) 100%);
+
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+
+  padding:10px;
+  filter: drop-shadow(0 10px 18px rgba(0,0,0,0.55));
+}
+
+.boardSurface{
+  position:relative;
+  border-radius:16px;
+  padding:14px;
+  border:1px solid rgba(255,255,255,0.16);
+
+  /* board face: grain bands + vignette */
+  background:
+    radial-gradient(700px 400px at 50% 20%, rgba(255,255,255,0.08) 0%, rgba(0,0,0,0.00) 60%),
+    radial-gradient(800px 600px at 50% 90%, rgba(0,0,0,0.35) 0%, rgba(0,0,0,0.00) 55%),
+
+    /* subtle “grain” */
+    repeating-linear-gradient(
+      90deg,
+      rgba(255,255,255,0.03) 0 6px,
+      rgba(0,0,0,0.00) 6px 18px
+    ),
+    repeating-linear-gradient(
+      0deg,
+      rgba(0,0,0,0.06) 0 1px,
+      rgba(0,0,0,0.00) 1px 10px
+    ),
+
+    linear-gradient(180deg, rgba(0,0,0,0.20) 0%, rgba(0,0,0,0.08) 100%);
+}
+
+.track{
+  position:relative;
+  padding:12px 10px 28px;
+  border-radius:14px;
+  border:1px solid rgba(255,255,255,0.14);
+
+  background:
+    radial-gradient(300px 180px at 20% 40%, rgba(255,255,255,0.06) 0%, rgba(0,0,0,0.00) 60%),
+    radial-gradient(340px 200px at 75% 80%, rgba(0,0,0,0.30) 0%, rgba(0,0,0,0.00) 60%),
+    linear-gradient(180deg, rgba(0,0,0,0.25) 0%, rgba(0,0,0,0.05) 100%),
+    repeating-linear-gradient(
+      90deg,
+      rgba(255,255,255,0.04) 0 10px,
+      rgba(0,0,0,0.00) 10px 30px
+    );
+}
+
+.lane{
+  height:38px;
+  border-radius:999px;
+  border:1px solid rgba(255,255,255,0.10);
+  margin:10px 0;
+  position:relative;
+  overflow:hidden;
+
+  background:
+    /* hole-ish feel */
+    repeating-radial-gradient(
+      circle at 10px 50%,
+      rgba(0,0,0,0.30) 0 1px,
+      rgba(0,0,0,0.00) 1px 8px
+    ),
+    repeating-linear-gradient(90deg, rgba(255,255,255,0.05) 0 1px, transparent 1px 12px),
+    linear-gradient(180deg, rgba(0,0,0,0.25) 0%, rgba(0,0,0,0.05) 100%);
+}
+
+.peg{
+  width:18px; height:18px;
+  border-radius:50%;
+  position:absolute;
+  top:50%;
+  transform:translate(-50%,-50%);
+  border:2px solid rgba(0,0,0,0.55);
+  box-shadow: 0 6px 12px rgba(0,0,0,0.55);
+}
+.peg1{ background:#42d3ff; }
+.peg2{ background:#ff4aa8; }
+
+.tickRow{
+  display:flex;
+  justify-content:space-between;
+  font-size:11px;
+  color:rgba(232,217,184,0.80);
+  margin-top:8px;
+  padding:0 6px;
+}
+.legend{
+  display:flex;
+  gap:14px;
+  margin-top:10px;
+  font-size:12px;
+  color:var(--muted);
+}
+.dotLine{ display:flex; align-items:center; gap:8px; }
+.dot{ width:10px; height:10px; border-radius:50%; }
+.dot1{ background:#42d3ff; }
+.dot2{ background:#ff4aa8; }
+
+/* =========================
+   Gameplay panel
+   ========================= */
+.hudRow{
+  display:grid;
+  grid-template-columns: 180px 1fr;
+  gap:14px;
+  margin-bottom:12px;
+}
+.countBox{
+  border:1px solid var(--line);
+  border-radius:16px;
+  background:#00000022;
+  padding:14px;
+}
+.countLabel{ font-size:12px; color:var(--muted); letter-spacing:1px; }
+.countNum{
+  font-size:56px;
+  font-weight:1000;
+  line-height:1;
+  margin-top:4px;
+  color:var(--gold);
+  text-shadow: 0 10px 30px #00000088;
+}
+.countHint{ color:var(--muted); font-size:12px; margin-top:6px; }
+
+.statusBox{
+  border:1px solid var(--line);
+  border-radius:16px;
+  background:#00000022;
+  padding:14px;
+}
+.statusTitle{ font-size:12px; color:var(--muted); margin-bottom:6px; }
+.statusText{ font-size:15px; font-weight:800; }
+.lastScore{
+  margin-top:10px;
+  padding:10px 12px;
+  border-radius:12px;
+  border:1px solid rgba(255,255,255,0.16);
+  background:#00000025;
+  color:#ffe8b0;
+  font-weight:900;
+}
+.hidden{ display:none !important; }
+
+.pileBlock{
+  border:1px solid var(--line);
+  border-radius:16px;
+  padding:12px;
+  background:#00000018;
+  margin-bottom:12px;
+}
+.pileTitle{ font-size:12px; color:var(--muted); margin-bottom:10px; }
+.pileArea{ display:flex; gap:10px; flex-wrap:wrap; }
+
+/* Buttons */
+.btn{
+  border:1px solid #ffffff2a;
+  background:#00000022;
+  color:var(--text);
+  border-radius:12px;
+  padding:10px 14px;
+  cursor:pointer;
+  font-weight:900;
+}
+.btn:hover{ filter:brightness(1.06); }
+.btn.primary{
+  background: linear-gradient(180deg, #2c5b63 0%, #163743 100%);
+  border-color:#ffffff33;
+}
+.btn.go{
+  background: linear-gradient(180deg, #ff7a4d 0%, var(--danger) 100%);
+  border-color:#00000055;
+  color:#1b0b08;
+  font-weight:1000;
+  padding:12px 22px;
+  border-radius:14px;
+  box-shadow: 0 10px 24px rgba(0,0,0,0.55);
+}
+.btn.go:hover{ transform: translateY(-1px); }
+.btn.big{
+  padding:14px 18px;
+  font-size:18px;
+  border-radius:14px;
+}
+
+/* Hand */
+.handBlock{
+  border:1px solid var(--line);
+  border-radius:16px;
+  padding:12px;
+  background:#00000018;
+}
+.actionRow{
+  display:flex;
+  gap:10px;
+  flex-wrap:wrap;
+  align-items:center;
+  justify-content:flex-start;
+  margin-bottom:12px;
+}
+.handArea{
+  display:flex;
+  gap:14px;
+  flex-wrap:wrap;
+  padding-top:6px;
+}
+
+/* Cards */
+.cardBtn{
+  width:86px;
+  height:128px;
+  border-radius:14px;
+  border:2px solid rgba(0,0,0,0.45);
+  background: #f4f0e6;
+  color:#111;
+  box-shadow: 0 12px 30px rgba(0,0,0,0.35);
+  position:relative;
+  cursor:pointer;
+  padding:0;
+}
+.cardBtn:hover{ transform: translateY(-2px); }
+.cardBtn.red{ color:#b51f1f; }
+.cardBtn.black{ color:#111; }
+
+.cardBtn .corner{
+  position:absolute;
+  top:10px; left:10px;
+  font-weight:1000;
+  font-size:18px;
+}
+.cardBtn .corner.bottom{
+  top:auto; left:auto;
+  bottom:10px; right:10px;
+  transform: rotate(180deg);
+}
+.cardBtn .suitBig{
+  position:absolute;
+  inset:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:44px;
+  opacity:0.95;
+}
+
+/* Selection highlight (no blue/white) */
+.cardBtn.selected{
+  outline: 4px solid var(--amber);
+  outline-offset: 3px;
+  box-shadow:
+    0 0 0 2px rgba(0,0,0,0.55),
+    0 18px 40px rgba(0,0,0,0.45),
+    0 0 28px rgba(227,160,24,0.35);
+}
+
+/* Show panel */
+.showPanel{ margin-top:14px; }
+.showGrid{
+  display:grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap:14px;
+}
+@media (max-width: 1200px){
+  .showGrid{ grid-template-columns: 1fr; }
+}
+.showCol h3{ margin:0 0 10px; }
+.cardRow{ display:flex; gap:10px; flex-wrap:wrap; margin-bottom:10px; }
+.breakList{ margin:0; padding-left:18px; color:var(--muted); }
+.totalLine{ margin-top:10px; font-weight:1000; color:var(--gold); }
+
+/* Overlay */
+.overlay{
+  position:fixed;
+  inset:0;
+  background:#000000aa;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:18px;
+  z-index:9999;
+}
+.overlayCard{ width:min(520px, 95vw); }
+.overlayTitle{ margin:0 0 6px; font-size:22px; }
+.overlayText{ margin:0 0 14px; color:var(--muted); }
+.overlayRow{ display:flex; flex-direction:column; gap:6px; margin-bottom:10px; }
+.overlayLabel{ font-size:12px; color:var(--muted); }
+.nameInput{
+  padding:12px 12px;
+  border-radius:12px;
+  border:1px solid rgba(255,255,255,0.18);
+  background:#00000022;
+  color:var(--text);
+  font-weight:900;
+}
+.overlayHint{ margin-top:12px; color:#d5c8a6; font-size:12px; opacity:0.9; }

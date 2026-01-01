@@ -1,33 +1,37 @@
-# Pirate Cribbage PWA — Project Status (2026-01-01)
+# Pirate Cribbage Plus AI — Project Status
 
-## Current gameplay
-- 2-player Socket.IO join by table ID + player names
-- Deal 6 → discard 2 to crib
-- Pegging phase:
-  - turn-taking + GO button only when valid
-  - pegging scoring: 15/31/pairs/runs/last card
-  - graphical pile shows played cards in sequence
-- Show scoring breakdown:
-  - 15s / pairs / runs / flush / nobs (hand + crib)
-- Game continues hand-to-hand (game-end + match-end handled in server.js branch, pending confirm)
+## Current (Baseline)
+- 2-player cribbage is working end-to-end:
+  - Join table
+  - Deal 6, discard 2 to crib
+  - Pegging (15/31/pairs/runs/last card) with running count UI
+  - Show scoring with breakdown (15s/pairs/runs/flush/nobs)
+  - Game ends at 121
+  - Match score tracking (multi-game)
+- UI: pirate theme, improved readability, cards visible/colored, Captain’s Log removed.
 
-## UI status
-- Captain’s Log removed entirely (per request)
-- Layout standardized to your sketch:
-  - board top-left
-  - crew bottom-left
-  - play area full right column
-- Cards are larger, colored suits, amber selection outline
-- GO button is prominent, count display is prominent
+## Goal (This branch)
+Add Solo vs AI mode while preserving baseline behavior.
 
-## This update (visual realism pass)
-- Rope border upgraded to braided rope style (CSS gradients)
-- Board wood upgraded (grain bands + vignette + depth)
-- Track/lanes improved for “holes + wear” feel
+## Plan (Next Changes)
+1. Add `ai=1` join option (URL param and/or join overlay toggle).
+2. Server creates BOT as PLAYER2 when AI mode requested and seat is open.
+3. BOT logic:
+   - Discard decision via Monte Carlo evaluation.
+   - Pegging decision using immediate scoring + defensive heuristics.
+   - Auto-GO when no playable cards.
+4. Ensure BOT respects game flow:
+   - Doesn’t stall
+   - Doesn’t play out of turn
+   - Handles end-of-hand, show, next-hand, next-game
+5. UI: show bot name and “Crib (PLAYERX)” label.
 
-## Next targets
-- If desired: even more “rope” (add knots at corners) — still CSS only
-- Improve peg styling (metal pins / carved pegs)
-- Confirm:
-  - game ends at 121 reliably
-  - match win display (if enabled in current server.js)
+## Known Risks
+- Infinite loop if bot “acts” inside state emit; must schedule bot moves with a short server-side timer and re-check state each time.
+- Ensure AI only acts when both sides are “ready” (e.g., after human discard).
+
+## Definition of Done
+- Can play solo from `/?table=JIM1&name=Jim&ai=1`
+- Game completes to 121 and match completes to target wins
+- No stalls during pegging / GO edge cases
+- Works in Chrome + Chromebook

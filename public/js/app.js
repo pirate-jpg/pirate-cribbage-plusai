@@ -17,7 +17,6 @@ const cribLine = el("cribLine");
 const handTitle = el("handTitle");
 const handHelp = el("handHelp");
 const handArea = el("handArea");
-const discardBtn = el("discardBtn");   // will be hidden/unused now
 const goBtn = el("goBtn");
 const nextHandBtn = el("nextHandBtn");
 
@@ -58,8 +57,13 @@ const nameJoinBtn = el("nameJoinBtn");
 const aiToggle = el("aiToggle");
 
 let state = null;
-let joined = false;
 let selectedForDiscard = new Set();
+
+const GAME_TARGET = 121;
+
+function otherPlayer(p) {
+  return p === "PLAYER1" ? "PLAYER2" : "PLAYER1";
+}
 
 function cardValue(rank) {
   if (rank === "A") return 1;
@@ -113,6 +117,32 @@ function setPegPosition(pegEl, score) {
   pegEl.style.left = `${pct}%`;
 }
 
+function getNames() {
+  const n1 = state?.names?.PLAYER1 || state?.players?.PLAYER1 || "P1";
+  const n2 = state?.names?.PLAYER2 || state?.players?.PLAYER2 || "P2";
+  return { n1, n2 };
+}
+
+function localGameIsOver() {
+  if (!state) return false;
+  // Trust server flags if present, but also enforce locally by score.
+  if (state.gameOver || state.matchOver) return true;
+  const p1 = state.scores?.PLAYER1 ?? 0;
+  const p2 = state.scores?.PLAYER2 ?? 0;
+  return (p1 >= GAME_TARGET || p2 >= GAME_TARGET);
+}
+
+function localWinner() {
+  if (!state) return null;
+  // Prefer server winner if present
+  if (state.gameWinner) return state.gameWinner;
+  const p1 = state.scores?.PLAYER1 ?? 0;
+  const p2 = state.scores?.PLAYER2 ?? 0;
+  if (p1 >= GAME_TARGET && p1 >= p2) return "PLAYER1";
+  if (p2 >= GAME_TARGET && p2 >= p1) return "PLAYER2";
+  return null;
+}
+
 function renderBoard() {
   if (!state) return;
 
@@ -123,6 +153,18 @@ function renderBoard() {
   setPegPosition(p2Peg, state.scores.PLAYER2);
 }
 
+function showCallout(text) {
+  if (!lastScore) return;
+  lastScore.textContent = text;
+  lastScore.classList.remove("hidden");
+}
+
+function hideCallout() {
+  if (!lastScore) return;
+  lastScore.classList.add("hidden");
+  lastScore.textContent = "—";
+}
+
 function renderPileAndHud() {
   if (!state) return;
 
@@ -131,27 +173,49 @@ function renderPileAndHud() {
   pileArea.innerHTML = "";
   const pile = state.peg?.pile || [];
   const show = pile.length > 10 ? pile.slice(pile.length - 10) : pile;
-  for (const c of show) {
-    pileArea.appendChild(makeCardButton(c, { disabled: true }));
+  for (const c of show) pileArea.appendChild(makeCardButton(c, { disabled: true }));
+
+  // If game over, blank out pegging HUD (and let the main render show winner)
+  if (localGameIsOver()) {
+    peggingStatus.textContent = "";
+    hideCallout();
+    return;
   }
 
   if (state.stage !== "pegging") {
     peggingStatus.textContent = "";
-    lastScore.classList.add("hidden");
+    hideCallout();
     return;
   }
 
   const myTurn = state.turn === state.me;
+  const opp = otherPlayer(state.me);
+
+  // Baseline status
   peggingStatus.textContent = myTurn ? "Your turn" : "Opponent’s turn";
 
+  // ✅ GO callout: if opponent has declared GO, show it BIG
+  const goObj = state.peg?.go || {};
+  const oppSaidGo = !!goObj[opp];
+  const meSaidGo = !!goObj[state.me];
+
+  if (oppSaidGo) {
+    showCallout("🏴‍☠️ OPPONENT SAYS GO!");
+    return;
+  }
+  if (meSaidGo) {
+    showCallout("You said GO.");
+    return;
+  }
+
+  // Otherwise show last scoring event (if any)
   const ev = state.lastPegEvent;
   if (ev && ev.pts && ev.pts > 0) {
     const who = (ev.player === state.me) ? "You" : "Opponent";
     const reasonText = (ev.reasons || []).join(", ");
-    lastScore.textContent = `${who} scored +${ev.pts} (${reasonText})`;
-    lastScore.classList.remove("hidden");
+    showCallout(`${who} scored +${ev.pts} (${reasonText})`);
   } else {
-    lastScore.classList.add("hidden");
+    hideCallout();
   }
 }
 
@@ -218,9 +282,32 @@ function maybeAutoSendDiscard() {
   if (state.stage !== "discard") return;
   if (selectedForDiscard.size !== 2) return;
 
-  // Auto-submit immediately
   socket.emit("discard_to_crib", { cardIds: Array.from(selectedForDiscard) });
   selectedForDiscard.clear();
+}
+
+function renderGameOverBannerIfNeeded() {
+  if (!state) return false;
+
+  const over = localGameIsOver();
+  if (!over) return false;
+
+  const win = localWinner();
+  const { n1, n2 } = getNames();
+  const winnerName = win === "PLAYER1" ? n1 : win === "PLAYER2" ? n2 : "Winner";
+
+  handTitle.textContent = "🏁 GAME OVER";
+  handHelp.textContent = `${winnerName} wins! (First to ${GAME_TARGET})`;
+
+  // Show a big callout too
+  showCallout(`🏴‍☠️ ${winnerName.toUpperCase()} WINS!`);
+
+  // lock all actions
+  if (goBtn) goBtn.style.display = "none";
+  if (nextHandBtn) nextHandBtn.style.display = "none";
+
+  // show panel can remain if it exists; we don’t hide it.
+  return true;
 }
 
 function render() {
@@ -237,9 +324,8 @@ function render() {
   dealerLine.textContent = `Dealer: ${state.names?.[state.dealer] || state.dealer}`;
   turnLine.textContent = `Turn: ${state.names?.[state.turn] || state.turn}`;
 
-  // score line using names (not P1/P2)
-  const n1 = state.names?.PLAYER1 || "P1";
-  const n2 = state.names?.PLAYER2 || "P2";
+  // Score line using names
+  const { n1, n2 } = getNames();
   scoreLine.textContent = `${n1} ${state.scores.PLAYER1} • ${n2} ${state.scores.PLAYER2}`;
 
   // Crib owner name (dealer owns crib)
@@ -251,17 +337,20 @@ function render() {
   renderPileAndHud();
   renderShow();
 
-  // reset buttons/areas
-  if (discardBtn) discardBtn.style.display = "none";
-  goBtn.style.display = "none";
-  nextHandBtn.style.display = "none";
+  // reset actions
+  if (goBtn) goBtn.style.display = "none";
+  if (nextHandBtn) nextHandBtn.style.display = "none";
 
   handArea.innerHTML = "";
+
+  // ✅ GAME OVER OVERRIDE (winner announced + lock UI)
+  if (renderGameOverBannerIfNeeded()) return;
 
   // STAGES
   if (state.stage === "lobby") {
     handTitle.textContent = "Waiting for crew…";
     handHelp.textContent = `Open the same table on another device: "${state.tableId}" (or select Play vs AI).`;
+    hideCallout();
     showPanel.classList.add("hidden");
     return;
   }
@@ -279,23 +368,18 @@ function render() {
       const btn = makeCardButton(card, {
         selected,
         onClick: () => {
-          // toggle selection
           if (selected) selectedForDiscard.delete(card.id);
           else {
             if (selectedForDiscard.size >= 2) return;
             selectedForDiscard.add(card.id);
           }
 
-          // re-render to show highlight
           render();
-
-          // auto-send when 2 selected
           maybeAutoSendDiscard();
         }
       });
       handArea.appendChild(btn);
     });
-
     return;
   }
 
@@ -317,6 +401,7 @@ function render() {
       handArea.appendChild(btn);
     });
 
+    // GO only when it can actually work: your turn, you have cards, and none playable
     const canPlay = myHand.some(c => count + cardValue(c.rank) <= 31);
     if (myTurn && myHand.length > 0 && !canPlay) {
       goBtn.style.display = "inline-block";
@@ -328,8 +413,12 @@ function render() {
   if (state.stage === "show") {
     handTitle.textContent = "Show";
     handHelp.textContent = "Review scoring. Click Next Hand when ready.";
-    nextHandBtn.style.display = "inline-block";
-    nextHandBtn.onclick = () => socket.emit("next_hand");
+
+    // Only allow next hand if game truly isn’t over
+    if (!localGameIsOver()) {
+      nextHandBtn.style.display = "inline-block";
+      nextHandBtn.onclick = () => socket.emit("next_hand");
+    }
 
     const myHand = state.myHand || [];
     myHand.forEach(card => handArea.appendChild(makeCardButton(card, { disabled: true })));
@@ -347,7 +436,6 @@ function doJoin() {
   const vsAI = !!(aiToggle && aiToggle.checked);
 
   socket.emit("join_table", { tableId, name, vsAI });
-  joined = true;
   joinOverlay.style.display = "none";
 }
 
@@ -364,17 +452,11 @@ nameJoinBtn.onclick = doJoin;
 nameInput.addEventListener("keydown", (e)=>{ if (e.key === "Enter") doJoin(); });
 tableInput.addEventListener("keydown", (e)=>{ if (e.key === "Enter") doJoin(); });
 
-socket.on("connect", () => {
-  // stay idle until player presses Set Sail
-});
-
 socket.on("state", (s) => {
   state = s;
 
-  // If stage changes away from discard, clear any stale selection
-  if (state.stage !== "discard" && selectedForDiscard.size) {
-    selectedForDiscard.clear();
-  }
+  // Clear stale discard selections if not in discard
+  if (state.stage !== "discard" && selectedForDiscard.size) selectedForDiscard.clear();
 
   render();
 });

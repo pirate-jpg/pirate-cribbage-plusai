@@ -1,34 +1,25 @@
-## Pirate Cribbage PlusAI — Project Status
+# PROJECT_STATUS.md
 
-Last updated: 2026-01-01
+## Pirate Cribbage Plus AI — Current Status (latest)
 
-## Current state
-This repo is a cloned “PlusAI” version of Pirate Cribbage. Human-vs-human remains available, and an optional “Play vs AI” mode is supported.
+### What’s working
+- Two-player mode: join table, deal 6, discard 2, pegging, show scoring breakdown.
+- UI theme: pirate look, wood-ish board, clearer cards, better selection highlight.
+- Layout: standardized two-column layout (left: board+crew, right: play), consistent across screens.
 
-### Working features
-- Join overlay with player name + table code
-- Optional “Play vs AI” checkbox
-- Full game flow: discard → pegging → show → next hand
-- Pegging scoring: 15 / 31, pairs, runs, last card
-- Show scoring with detailed breakdown: 15s / pairs / runs / flush / nobs
-- Game target: 121
-- Match tracking: first to 3 wins (New Match / Next Game)
+### Fixed in this update
+- AI mode stability: server now runs a real AI engine (discard + pegging + GO), with a turn resolver to prevent “random” stalls.
+- GO visibility: when either player says GO, UI shows **“☠️ <name> says GO!”** loudly.
+- Discard UX: selecting **2 cards auto-sends to crib** (no dead button).
+- Crew score uses names instead of P1/P2.
+- Pre-discard messaging: “Select 2 cards to send to <dealer>’s crib.”
+- Removed “Peggy” and any silhouette references from the UI.
 
-## Fixes included in this update
-- AI no longer stalls: server actively drives AI actions in discard + pegging, and after Next Hand/Next Game.
-- GO is now obvious: “Opponent says GO!” is displayed prominently.
-- Discard is auto-send: selecting exactly 2 cards immediately sends them to the crib (no dead button).
-- Crew score uses player names (not P1/P2).
-- Crib owner text uses the dealer’s name everywhere (“Crib (Jim)”).
-- Winner announced and gameplay locked when score reaches 121 (no dealing past 121).
-- Layout stabilized to a consistent two-column design (board+crew left, play+show right).
-- Removed “Peggy” references and removed any “Pirate Jim silhouette” references from UI copy.
+### Known limitations / next improvements
+- AI is “simple” (lowest playable card + basic discard heuristic). It is reliable, but not strategic.
+- No “Play full match to X wins” UI polish yet (server tracks match wins, UI currently focuses on game flow).
 
-## Known limitations (next work)
-- AI strategy is currently “basic/greedy” for pegging and simple for discard.
-- AI does not yet play “show” optimally (show scoring is accurate; AI decision-making is not tuned).
-
-## Next recommended steps
-1. Improve AI discard heuristics (crib-aware strategy when dealer vs non-dealer).
-2. Improve AI pegging strategy (look-ahead, avoid setting up opponent runs).
-3. Add a difficulty selector (Easy / Normal / Hard).
+### Next tasks (recommended)
+1. AI strategy upgrade (better discard selection; pegging decisions that maximize immediate score).
+2. Match-wins UI (visual pips/badges; match-over banner).
+3. Add a “New Table (AI)” one-click button that auto-generates a unique table code (optional).

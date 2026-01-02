@@ -53,8 +53,11 @@ const ndTotal = el("ndTotal");
 const dTotal = el("dTotal");
 const cTotal = el("cTotal");
 
-// Toast
+// Toast + Modal
 const toast = el("toast");
+const modalOverlay = el("modalOverlay");
+const modalText = el("modalText");
+const modalOk = el("modalOk");
 
 // Join overlay
 const joinOverlay = el("joinOverlay");
@@ -63,29 +66,10 @@ const tableInput = el("tableInput");
 const vsAiInput = el("vsAiInput");
 const nameJoinBtn = el("nameJoinBtn");
 
-// GO overlay
-const goOverlay = el("goOverlay");
-const goTitle = el("goTitle");
-const goText = el("goText");
-const goOkBtn = el("goOkBtn");
-
-// End overlay
-const endOverlay = el("endOverlay");
-const endTitle = el("endTitle");
-const endText = el("endText");
-const endContinueBtn = el("endContinueBtn");
-const endNewMatchBtn = el("endNewMatchBtn");
-const endHint = el("endHint");
-
 let state = null;
-
-// Track GO events
 let lastGoSeenTs = 0;
-let goModalActive = false;
-
-// Track end-of-game acknowledgement so it doesn't pop repeatedly
-let lastGameOverKeyShown = "";
-let lastGameOverKeyAcked = "";
+let modalLocked = false;
+let discardsSeen = { PLAYER1: 0, PLAYER2: 0 };
 
 function cardValue(rank) {
   if (rank === "A") return 1;
@@ -100,7 +84,6 @@ function suitClass(suit) {
 function makeCardButton(card, opts = {}) {
   const btn = document.createElement("button");
   btn.className = `cardBtn ${suitClass(card.suit)}`;
-  if (opts.selected) btn.classList.add("selected");
   if (opts.disabled) btn.disabled = true;
 
   const corner1 = document.createElement("div");
@@ -146,10 +129,8 @@ function playerName(p) {
 
 function renderBoard() {
   if (!state) return;
-
   p1Label.textContent = state.players.PLAYER1 || "P1";
   p2Label.textContent = state.players.PLAYER2 || "P2";
-
   setPegPosition(p1Peg, state.scores.PLAYER1);
   setPegPosition(p2Peg, state.scores.PLAYER2);
 }
@@ -162,98 +143,20 @@ function showToast(msg) {
   showToast._t = setTimeout(() => toast.classList.remove("show"), 2200);
 }
 
-// ---- GO MODAL (sticky only when it matters) ----
-function showGoModal(whoText) {
-  if (!goOverlay) return;
-  goModalActive = true;
-
-  goTitle.textContent = "GO!";
-  goText.textContent = `${whoText} said GO — your turn.`;
-  goOverlay.classList.remove("hidden");
-
-  goOkBtn.onclick = () => {
-    goOverlay.classList.add("hidden");
-    goModalActive = false;
-    // re-render in case buttons/hand were hidden
-    render();
-  };
+function showModal(msg) {
+  if (!modalOverlay) return;
+  modalLocked = true;
+  modalText.textContent = msg;
+  modalOverlay.classList.remove("hidden");
 }
 
-// ---- END MODAL (pause after game ends) ----
-function makeGameOverKey(s) {
-  // build a deterministic key from state so modal triggers once per finished game
-  const mw1 = s.matchWins?.PLAYER1 ?? 0;
-  const mw2 = s.matchWins?.PLAYER2 ?? 0;
-  return [
-    s.tableId,
-    s.gameOver ? "G1" : "G0",
-    s.matchOver ? "M1" : "M0",
-    s.gameWinner || "none",
-    s.matchWinner || "none",
-    s.scores?.PLAYER1 ?? 0,
-    s.scores?.PLAYER2 ?? 0,
-    mw1,
-    mw2,
-    s.dealer
-  ].join("|");
+function hideModal() {
+  modalLocked = false;
+  modalOverlay.classList.add("hidden");
 }
 
-function showEndModal() {
-  if (!endOverlay || !state) return;
-
-  const winnerName = playerName(state.gameWinner);
-  const iWon = state.gameWinner === state.me;
-
-  endOverlay.classList.remove("hidden");
-
-  if (state.matchOver) {
-    endTitle.textContent = "🏆 Match Over";
-    endText.textContent = `${playerName(state.matchWinner)} wins the match (best of 3).`;
-    endHint.textContent = "Start a new match when ready.";
-
-    endContinueBtn.style.display = "none";
-    endNewMatchBtn.style.display = "inline-block";
-
-    endNewMatchBtn.onclick = () => {
-      endOverlay.classList.add("hidden");
-      lastGameOverKeyAcked = lastGameOverKeyShown;
-      socket.emit("new_match");
-    };
-  } else {
-    endTitle.textContent = iWon ? "🏴‍☠️ You won!" : "☠️ You lost!";
-    endText.textContent = `${winnerName} won this game.`;
-    endHint.textContent = "Continue when you’re ready.";
-
-    endNewMatchBtn.style.display = "none";
-    endContinueBtn.style.display = "inline-block";
-
-    endContinueBtn.onclick = () => {
-      endOverlay.classList.add("hidden");
-      lastGameOverKeyAcked = lastGameOverKeyShown;
-      socket.emit("next_hand");
-    };
-  }
-}
-
-function maybeHandleEndModal() {
-  if (!state) return;
-
-  // Only in show stage when gameOver becomes true
-  if (!(state.stage === "show" && state.gameOver)) {
-    // if leaving show, also hide modal
-    if (endOverlay && !endOverlay.classList.contains("hidden")) {
-      endOverlay.classList.add("hidden");
-    }
-    return;
-  }
-
-  const key = makeGameOverKey(state);
-  lastGameOverKeyShown = key;
-
-  // If not acknowledged, show it
-  if (lastGameOverKeyAcked !== key) {
-    showEndModal();
-  }
+if (modalOk) {
+  modalOk.onclick = hideModal;
 }
 
 function renderPileAndHud() {
@@ -264,9 +167,7 @@ function renderPileAndHud() {
   pileArea.innerHTML = "";
   const pile = state.peg?.pile || [];
   const show = pile.length > 10 ? pile.slice(pile.length - 10) : pile;
-  for (const c of show) {
-    pileArea.appendChild(makeCardButton(c, { disabled: true }));
-  }
+  for (const c of show) pileArea.appendChild(makeCardButton(c, { disabled: true }));
 
   if (state.stage !== "pegging") {
     peggingStatus.textContent = "";
@@ -287,24 +188,14 @@ function renderPileAndHud() {
     lastScore.classList.add("hidden");
   }
 
-  // GO notification (sticky only when it matters)
+  // GO notification:
   const ge = state.lastGoEvent;
   if (ge && ge.ts && ge.ts !== lastGoSeenTs) {
     lastGoSeenTs = ge.ts;
-
     const who = ge.player === state.me ? "You" : "Opponent";
-
-    // compromise:
-    // - if opponent says GO and it's now your turn, show modal that must be acknowledged
-    // - otherwise just show a toast
-    const opponentSaidGo = ge.player !== state.me;
-    const nowYourTurn = state.turn === state.me;
-
-    if (opponentSaidGo && nowYourTurn) {
-      showGoModal(who);
-    } else {
-      showToast(`${who} said GO`);
-    }
+    // Opponent GO should be unmistakable
+    if (who === "Opponent") showModal("Opponent said GO");
+    else showToast("You said GO");
   }
 }
 
@@ -369,9 +260,6 @@ function renderShow() {
 function render() {
   if (!state) return;
 
-  // If modals are up, we still render the underlying UI, but we’ll avoid showing “Next Hand”
-  const endModalBlocking = (state.stage === "show" && state.gameOver && lastGameOverKeyAcked !== lastGameOverKeyShown);
-
   tableLine.textContent = `Table: ${state.tableId}`;
   meLine.textContent = `You: ${playerName(state.me)}`;
 
@@ -383,10 +271,8 @@ function render() {
   dealerLine.textContent = `Dealer: ${playerName(state.dealer)}`;
   turnLine.textContent = `Turn: ${playerName(state.turn)}`;
 
-  // Game score with NAMES
   scoreLine.textContent = `${p1} ${state.scores.PLAYER1} • ${p2} ${state.scores.PLAYER2}`;
 
-  // Match score (best of 3)
   const mw1 = state.matchWins?.PLAYER1 ?? 0;
   const mw2 = state.matchWins?.PLAYER2 ?? 0;
   matchLine.textContent = `Match (best of 3): ${p1} ${mw1} • ${p2} ${mw2}`;
@@ -399,7 +285,6 @@ function render() {
   renderPileAndHud();
   renderShow();
 
-  // reset buttons
   discardBtn.style.display = "none";
   goBtn.style.display = "none";
   nextHandBtn.style.display = "none";
@@ -407,131 +292,4 @@ function render() {
 
   handArea.innerHTML = "";
 
-  // STAGES
-  if (state.stage === "lobby") {
-    handTitle.textContent = "Waiting for crew…";
-    handHelp.textContent = `If this is 2-player, open the same table code on the other device: "${state.tableId}".`;
-    showPanel.classList.add("hidden");
-    return;
-  }
-
-  if (state.stage === "discard") {
-    showPanel.classList.add("hidden");
-
-    const cribOwner = playerName(state.dealer);
-    handTitle.textContent = "Your Hand";
-    handHelp.textContent = `Click a card to send it to ${cribOwner}'s crib (send 2 total).`;
-
-    const myHand = state.myHand || [];
-    myHand.forEach(card => {
-      const btn = makeCardButton(card, {
-        onClick: () => {
-          socket.emit("discard_one", { cardId: card.id });
-        }
-      });
-      handArea.appendChild(btn);
-    });
-
-    return;
-  }
-
-  if (state.stage === "pegging") {
-    showPanel.classList.add("hidden");
-    handTitle.textContent = "Pegging";
-    handHelp.textContent = "Play a card without exceeding 31. If you can’t play, press GO.";
-
-    // If GO modal is up, don't allow interaction underneath (overlay blocks taps),
-    // but we can still render normally.
-    const myTurn = state.turn === state.me;
-    const myHand = state.myHand || [];
-    const count = state.peg.count;
-
-    myHand.forEach(card => {
-      const playable = myTurn && (count + cardValue(card.rank) <= 31);
-      const btn = makeCardButton(card, {
-        disabled: !playable,
-        onClick: () => socket.emit("play_card", { cardId: card.id })
-      });
-      handArea.appendChild(btn);
-    });
-
-    const canPlay = myHand.some(c => count + cardValue(c.rank) <= 31);
-    if (myTurn && myHand.length > 0 && !canPlay) {
-      goBtn.style.display = "inline-block";
-      goBtn.onclick = () => socket.emit("go");
-    }
-    return;
-  }
-
-  if (state.stage === "show") {
-    handTitle.textContent = "Show";
-
-    if (state.matchOver) {
-      handHelp.textContent = `${playerName(state.matchWinner)} wins the match (best of 3).`;
-    } else if (state.gameOver) {
-      handHelp.textContent = `${playerName(state.gameWinner)} won this game.`;
-    } else {
-      handHelp.textContent = "Review scoring. Click Next Hand when ready.";
-    }
-
-    // If gameOver, we want the modal to control the flow.
-    if (!endModalBlocking) {
-      nextHandBtn.style.display = "inline-block";
-      nextHandBtn.onclick = () => socket.emit("next_hand");
-    }
-
-    if (state.matchOver && !endModalBlocking) {
-      newMatchBtn.style.display = "inline-block";
-      newMatchBtn.onclick = () => socket.emit("new_match");
-    }
-
-    const myHand = state.myHand || [];
-    myHand.forEach(card => handArea.appendChild(makeCardButton(card, { disabled: true })));
-    if (state.cut) handArea.appendChild(makeCardButton(state.cut, { disabled: true }));
-
-    // After rendering show, decide whether to pop end modal
-    maybeHandleEndModal();
-    return;
-  }
-}
-
-// JOIN FLOW
-function doJoin() {
-  const name = (nameInput.value || "").trim().slice(0, 16);
-  const tableId = (tableInput.value || "").trim().slice(0, 24) || "JIM1";
-  const vsAI = !!vsAiInput?.checked;
-
-  if (!name) { alert("Enter a name."); return; }
-  socket.emit("join_table", { tableId, name, vsAI });
-  joinOverlay.style.display = "none";
-}
-
-// Pre-fill from URL if present
-(function initJoinDefaults(){
-  const qs = new URLSearchParams(location.search);
-  const table = (qs.get("table") || "JIM1").toString().trim().slice(0, 24);
-  const name = (qs.get("name") || "").toString().trim().slice(0, 16);
-  tableInput.value = table;
-  if (name) nameInput.value = name;
-})();
-
-nameJoinBtn.onclick = doJoin;
-nameInput.addEventListener("keydown", (e)=>{ if (e.key === "Enter") doJoin(); });
-tableInput.addEventListener("keydown", (e)=>{ if (e.key === "Enter") doJoin(); });
-
-socket.on("connect", () => {
-  // idle until Set Sail
-});
-
-socket.on("state", (s) => {
-  state = s;
-
-  // update the "shown" key whenever a new end-state arrives
-  if (state?.stage === "show" && state?.gameOver) {
-    lastGameOverKeyShown = makeGameOverKey(state);
-  }
-
-  render();
-});
-
-socket.on("error_msg", (msg) => alert(msg));
+  if (state.stage === "l

@@ -36,7 +36,7 @@ const countNum = el("countNum");
 const peggingStatus = el("peggingStatus");
 const lastScore = el("lastScore");
 
-// NEW: obvious action banner
+// Obvious action banner
 const actionBanner = el("actionBanner");
 
 // Board
@@ -126,7 +126,6 @@ function setPegPosition(pegEl, score) {
 
 function nameOf(playerId) {
   if (!state) return playerId;
-  // Prefer player display names if present
   const nm = state.players?.[playerId];
   if (nm) return nm;
   return state.names?.[playerId] || playerId;
@@ -181,7 +180,6 @@ function renderActionBanner() {
   const a = state?.lastAction;
   if (!a || !a.type) return;
 
-  // Make opponent GO VERY obvious
   if (a.type === "go") {
     const who = (a.player === state.me) ? "You" : "Opponent";
     actionBanner.textContent = `🛑 ${who} says GO!`;
@@ -189,14 +187,11 @@ function renderActionBanner() {
     return;
   }
 
-  // Show short banners for resets / deals if desired
   if (a.type === "reset") {
-    actionBanner.textContent = `⚓ ${a.text || "Count resets."}`;
+    actionBanner.textContent = `⚓ ${a.text || "Count resets to 0."}`;
     actionBanner.classList.remove("hidden");
     return;
   }
-
-  // Plays are already visible via pile; keep banner quiet
 }
 
 function renderPileAndHud() {
@@ -261,203 +256,4 @@ function renderShow() {
   const nonDealer = state.show.nonDealer;
   const dealer = state.show.dealer;
 
-  ndTitle.textContent = `Non-dealer (${nameOf(nonDealer)})`;
-  dTitle.textContent = `Dealer (${nameOf(dealer)})`;
-  cTitle.textContent = `Crib (${nameOf(dealer)})`;
-
-  ndCards.innerHTML = "";
-  dCards.innerHTML = "";
-  cCards.innerHTML = "";
-
-  const nd = state.show.hand[nonDealer];
-  const de = state.show.hand[dealer];
-  const cr = state.show.crib;
-
-  for (const c of nd.cards) ndCards.appendChild(makeCardButton(c, { disabled: true }));
-  ndCards.appendChild(makeCardButton(cut, { disabled: true }));
-
-  for (const c of de.cards) dCards.appendChild(makeCardButton(c, { disabled: true }));
-  dCards.appendChild(makeCardButton(cut, { disabled: true }));
-
-  for (const c of cr.cards) cCards.appendChild(makeCardButton(c, { disabled: true }));
-  cCards.appendChild(makeCardButton(cut, { disabled: true }));
-
-  renderBreakdown(ndBreak, nd.breakdown);
-  renderBreakdown(dBreak, de.breakdown);
-  renderBreakdown(cBreak, cr.breakdown);
-
-  ndTotal.textContent = `Total: ${nd.breakdown.total}`;
-  dTotal.textContent = `Total: ${de.breakdown.total}`;
-  cTotal.textContent = `Total: ${cr.breakdown.total}`;
-}
-
-function render() {
-  if (!state) return;
-
-  tableLine.textContent = `Table: ${state.tableId}`;
-  meLine.textContent = `You: ${nameOf(state.me)}`;
-
-  const p1 = state.players.PLAYER1 ? state.players.PLAYER1 : "—";
-  const p2 = state.players.PLAYER2 ? state.players.PLAYER2 : "—";
-  playersLine.textContent = `Players: ${p1} vs ${p2}`;
-
-  stageLine.textContent = `Stage: ${state.stage}`;
-  dealerLine.textContent = `Dealer: ${nameOf(state.dealer)}`;
-  turnLine.textContent = `Turn: ${nameOf(state.turn)}`;
-
-  // ✅ Crew score uses names (not P1/P2)
-  scoreLine.textContent = `${nameOf("PLAYER1")} ${state.scores.PLAYER1} • ${nameOf("PLAYER2")} ${state.scores.PLAYER2}`;
-
-  cribLine.textContent =
-    `Crib (${nameOf(state.cribOwner)}) • Discards: P1 ${state.discardsCount.PLAYER1}/2  P2 ${state.discardsCount.PLAYER2}/2`;
-
-  initTicksOnce();
-  renderBoard();
-  renderMatch();
-  renderPileAndHud();
-  renderShow();
-  renderActionBanner();
-
-  // Reset buttons each render
-  discardBtn.style.display = "none";
-  goBtn.style.display = "none";
-  nextHandBtn.style.display = "none";
-  discardBtn.disabled = true;
-
-  handArea.innerHTML = "";
-
-  if (state.matchOver) {
-    handTitle.textContent = "Match Over";
-    handHelp.textContent = `${nameOf(state.matchWinner)} wins the match.`;
-    return;
-  }
-
-  if (state.gameOver && state.stage !== "show") {
-    handTitle.textContent = "Game Over";
-    handHelp.textContent = `${nameOf(state.gameWinner)} won this game. Click Next Game.`;
-    return;
-  }
-
-  if (state.stage === "lobby") {
-    handTitle.textContent = "Waiting for crew…";
-    handHelp.textContent = state.ai?.enabled
-      ? "AI is aboard. Dealing begins once you Set Sail."
-      : `Open the same table on another device: "${state.tableId}".`;
-    showPanel.classList.add("hidden");
-    return;
-  }
-
-  if (state.stage === "discard") {
-    showPanel.classList.add("hidden");
-    const cribOwnerName = nameOf(state.cribOwner);
-
-    handTitle.textContent = "Discard";
-    handHelp.textContent = `Discard 2 cards to ${cribOwnerName}’s crib.`;
-
-    const myHand = state.myHand || [];
-    myHand.forEach(card => {
-      const selected = selectedForDiscard.has(card.id);
-      const btn = makeCardButton(card, {
-        selected,
-        onClick: () => {
-          if (selected) selectedForDiscard.delete(card.id);
-          else {
-            if (selectedForDiscard.size >= 2) return;
-            selectedForDiscard.add(card.id);
-          }
-          discardBtn.disabled = selectedForDiscard.size !== 2;
-          render();
-        }
-      });
-      handArea.appendChild(btn);
-    });
-
-    discardBtn.style.display = "inline-block";
-    discardBtn.disabled = selectedForDiscard.size !== 2;
-    discardBtn.onclick = () => {
-      if (selectedForDiscard.size !== 2) return;
-      socket.emit("discard_to_crib", { cardIds: Array.from(selectedForDiscard) });
-      selectedForDiscard.clear();
-      discardBtn.disabled = true;
-    };
-    return;
-  }
-
-  if (state.stage === "pegging") {
-    showPanel.classList.add("hidden");
-    handTitle.textContent = "Pegging";
-    handHelp.textContent = "Play a card without exceeding 31. If you can’t play, press GO.";
-
-    const myTurn = state.turn === state.me;
-    const myHand = state.myHand || [];
-    const count = state.peg.count;
-
-    myHand.forEach(card => {
-      const playable = myTurn && (count + cardValue(card.rank) <= 31);
-      const btn = makeCardButton(card, {
-        disabled: !playable,
-        onClick: () => socket.emit("play_card", { cardId: card.id })
-      });
-      handArea.appendChild(btn);
-    });
-
-    const canPlay = myHand.some(c => count + cardValue(c.rank) <= 31);
-    if (myTurn && myHand.length > 0 && !canPlay) {
-      goBtn.style.display = "inline-block";
-      goBtn.onclick = () => socket.emit("go");
-    }
-    return;
-  }
-
-  if (state.stage === "show") {
-    handTitle.textContent = "Show";
-    handHelp.textContent = state.gameOver
-      ? "This game ended at 121. Click Next Game to continue the match."
-      : "Review scoring. Click Next Hand when ready.";
-
-    if (!state.gameOver) {
-      nextHandBtn.style.display = "inline-block";
-      nextHandBtn.onclick = () => socket.emit("next_hand");
-    }
-
-    const myHand = state.myHand || [];
-    myHand.forEach(card => handArea.appendChild(makeCardButton(card, { disabled: true })));
-    if (state.cut) handArea.appendChild(makeCardButton(state.cut, { disabled: true }));
-    return;
-  }
-}
-
-// JOIN FLOW
-function doJoin() {
-  const name = (nameInput.value || "").trim().slice(0, 16);
-  const tableId = (tableInput.value || "").trim().slice(0, 24) || "JIM1";
-  const ai = !!aiToggle?.checked;
-
-  if (!name) { alert("Enter a name."); return; }
-
-  socket.emit("join_table", { tableId, name, ai });
-  joinOverlay.style.display = "none";
-}
-
-// Pre-fill from URL if present
-(function initJoinDefaults(){
-  const qs = new URLSearchParams(location.search);
-  const table = (qs.get("table") || "JIM1").toString().trim().slice(0, 24);
-  const name = (qs.get("name") || "").toString().trim().slice(0, 16);
-  const ai = (qs.get("ai") === "1");
-
-  tableInput.value = table;
-  if (name) nameInput.value = name;
-  if (aiToggle) aiToggle.checked = ai;
-})();
-
-nameJoinBtn.onclick = doJoin;
-nameInput.addEventListener("keydown", (e)=>{ if (e.key === "Enter") doJoin(); });
-tableInput.addEventListener("keydown", (e)=>{ if (e.key === "Enter") doJoin(); });
-
-socket.on("state", (s) => {
-  state = s;
-  render();
-});
-
-socket.on("error_msg", (msg) => alert(msg));
+  ndTitle.textContent = `Non-dealer

@@ -262,7 +262,7 @@ function resetForNewGame(t) {
 }
 
 function resetForNewMatch(t) {
-  t.matchWins = { PLAYER1: 0, PLAYER2:	trigger: "PLAYER1", PLAYER2: 0 };
+  t.matchWins = { PLAYER1: 0, PLAYER2: 0 };
   t.matchOver = false;
   t.matchWinner = null;
 

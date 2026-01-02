@@ -12,11 +12,11 @@
   <div id="joinOverlay" class="overlay">
     <div class="panel overlayCard">
       <h2 class="overlayTitle">🏴‍☠️ Set Sail</h2>
-      <p class="overlayText">Enter your name and table to start a game.</p>
+      <p class="overlayText">Enter your name and a table code to start.</p>
 
       <div class="overlayRow">
         <div class="overlayLabel">Your name</div>
-        <input id="nameInput" class="nameInput" maxlength="16" placeholder="Captain" />
+        <input id="nameInput" class="nameInput" maxlength="16" placeholder="Captain Jim" />
       </div>
 
       <div class="overlayRow">
@@ -24,15 +24,28 @@
         <input id="tableInput" class="nameInput" maxlength="24" placeholder="JIM1" />
       </div>
 
-      <div class="overlayRow" style="margin-top:10px;">
-        <label style="display:flex; gap:10px; align-items:center; color: var(--muted); font-size: 13px;">
-          <input id="aiToggle" type="checkbox" />
-          Play vs AI <span style="opacity:.8;">(leave unchecked for 2-player)</span>
+      <div class="overlayRow">
+        <label class="checkRow">
+          <input id="vsAiCheck" type="checkbox" />
+          <span><b>Play vs AI</b> <span class="mutedInline">(leave unchecked for 2-player)</span></span>
         </label>
       </div>
 
       <button id="nameJoinBtn" class="btn primary big">Set Sail</button>
-      <div class="overlayHint">Tip: use the same table code on another device for 2-player.</div>
+      <div class="overlayHint">Tip: for 2-player, open the same table code on another device.</div>
+    </div>
+  </div>
+
+  <!-- WINNER OVERLAY -->
+  <div id="winnerOverlay" class="overlay hidden">
+    <div class="panel overlayCard">
+      <h2 id="winnerTitle" class="overlayTitle">🏁 Game Over</h2>
+      <p id="winnerText" class="overlayText">—</p>
+      <div class="overlayRow overlayActions">
+        <button id="nextGameBtn" class="btn primary big">Next Game</button>
+        <button id="newMatchBtn" class="btn ghost big">New Match</button>
+      </div>
+      <div class="overlayHint">If match is over, start a New Match.</div>
     </div>
   </div>
 
@@ -53,7 +66,7 @@
     <section class="grid">
 
       <!-- LEFT TOP: BOARD -->
-      <section class="panel boardPanel woodFrame">
+      <section class="panel woodFrame boardPanel">
         <div class="panelHeader">
           <h2>Cribbage Board</h2>
           <div class="mutedSmall">Race to 121</div>
@@ -95,7 +108,27 @@
           <div id="scoreLine" class="scoreText">—</div>
         </div>
 
+        <div class="matchBlock">
+          <div class="scoreTitle">Match Wins (first to 3)</div>
+          <div id="matchLine" class="matchLine">—</div>
+          <div class="matchGrid">
+            <div class="matchSide">
+              <div class="matchName" id="p1Name">P1</div>
+              <div class="pips" id="p1Wins"></div>
+            </div>
+            <div class="vs">☠️</div>
+            <div class="matchSide">
+              <div class="matchName" id="p2Name">P2</div>
+              <div class="pips" id="p2Wins"></div>
+            </div>
+          </div>
+        </div>
+
         <div class="mutedSmall" id="cribLine">Crib: —</div>
+
+        <div class="crewButtons">
+          <button id="crewNewMatchBtn" class="btn ghost">New Match</button>
+        </div>
       </aside>
 
       <!-- RIGHT: PLAY -->
@@ -115,6 +148,7 @@
           <div class="statusBox">
             <div class="statusTitle">Pegging Status</div>
             <div id="peggingStatus" class="statusText">—</div>
+            <div id="goCallout" class="goCallout hidden">—</div>
             <div id="lastScore" class="lastScore hidden">—</div>
           </div>
         </div>

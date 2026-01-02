@@ -12,7 +12,7 @@
   <div id="joinOverlay" class="overlay">
     <div class="panel overlayCard">
       <h2 class="overlayTitle">🏴‍☠️ Set Sail</h2>
-      <p class="overlayText">Enter your name and table. Share the same table with Peggy.</p>
+      <p class="overlayText">Enter your name and table. Share the same table with Peggy — or sail solo vs the AI.</p>
 
       <div class="overlayRow">
         <div class="overlayLabel">Your name</div>
@@ -24,8 +24,15 @@
         <input id="tableInput" class="nameInput" maxlength="24" placeholder="JIM1" />
       </div>
 
-      <button id="nameJoinBtn" class="btn primary big">Set Sail</button>
-      <div class="overlayHint">Tip: open the same table on Peggy’s phone (same table code).</div>
+      <div class="overlayRow" style="margin-top:6px;">
+        <label style="display:flex; gap:10px; align-items:center; cursor:pointer; user-select:none;">
+          <input id="aiToggle" type="checkbox" />
+          <span class="mutedSmall">Solo vs AI (Blackbeard joins as Player 2)</span>
+        </label>
+      </div>
+
+      <button id="nameJoinBtn" class="btn primary big" style="margin-top:10px;">Set Sail</button>
+      <div class="overlayHint">Tip: You can also use <b>?ai=1</b> in the URL to auto-enable the AI.</div>
     </div>
   </div>
 
@@ -127,7 +134,7 @@
           <div id="handArea" class="handArea"></div>
         </div>
 
-        <!-- SHOW PANEL (kept) -->
+        <!-- SHOW PANEL -->
         <div id="showPanel" class="panel showPanel hidden">
           <div class="panelHeader spread">
             <h2>Show</h2>

@@ -12,7 +12,7 @@
   <div id="joinOverlay" class="overlay">
     <div class="panel overlayCard">
       <h2 class="overlayTitle">🏴‍☠️ Set Sail</h2>
-      <p class="overlayText">Enter your name and table to start a game.</p>
+      <p class="overlayText">Enter your name and table to start.</p>
 
       <div class="overlayRow">
         <div class="overlayLabel">Your name</div>
@@ -24,16 +24,16 @@
         <input id="tableInput" class="nameInput" maxlength="24" placeholder="JIM1" />
       </div>
 
-      <div class="overlayRow" style="margin-top:10px;">
-        <label style="display:flex;align-items:center;gap:10px;user-select:none;">
-          <input id="vsAiInput" type="checkbox" />
-          <span style="font-weight:800;">Play vs AI</span>
-          <span style="opacity:0.75;font-size:12px;">(Leave unchecked for 2-player)</span>
-        </label>
-      </div>
+      <label class="checkRow">
+        <input id="vsAiInput" type="checkbox" />
+        <span><strong>Play vs AI</strong> <span class="mutedSmall">(leave unchecked for 2-player)</span></span>
+      </label>
 
       <button id="nameJoinBtn" class="btn primary big">Set Sail</button>
-      <div class="overlayHint">Tip: use the same table code on another device for 2-player.</div>
+
+      <div class="overlayHint">
+        Tip: for 2-player, open the same table code on another device/browser.
+      </div>
     </div>
   </div>
 
@@ -97,6 +97,11 @@
         </div>
 
         <div class="mutedSmall" id="cribLine">Crib: —</div>
+
+        <div class="crewButtons">
+          <button id="newMatchBtn" class="btn primary">New Match</button>
+          <button id="nextGameBtn" class="btn primary">Next Game</button>
+        </div>
       </aside>
 
       <!-- RIGHT: PLAY -->
@@ -127,8 +132,6 @@
 
         <div class="handBlock">
           <div class="actionRow">
-            <!-- discard is now auto-sent when 2 selected -->
-            <button id="discardBtn" class="btn primary" style="display:none;">Send to Crib</button>
             <button id="goBtn" class="btn go">GO</button>
             <button id="nextHandBtn" class="btn primary">Next Hand</button>
           </div>

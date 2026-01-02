@@ -1,12 +1,5 @@
-// public/js/app.js
-// Robust client: does not crash if optional elements are missing.
-// Set Sail handler is attached after DOMContentLoaded.
-
 const socket = io();
-
-function el(id) {
-  return document.getElementById(id);
-}
+const el = (id) => document.getElementById(id);
 
 // Top chips
 const tableLine = el("tableLine");
@@ -24,7 +17,7 @@ const cribLine = el("cribLine");
 const handTitle = el("handTitle");
 const handHelp = el("handHelp");
 const handArea = el("handArea");
-const discardBtn = el("discardBtn");
+const discardBtn = el("discardBtn");   // will be hidden/unused now
 const goBtn = el("goBtn");
 const nextHandBtn = el("nextHandBtn");
 
@@ -62,21 +55,20 @@ const joinOverlay = el("joinOverlay");
 const nameInput = el("nameInput");
 const tableInput = el("tableInput");
 const nameJoinBtn = el("nameJoinBtn");
-
-// Optional: AI checkbox (if present in your HTML)
 const aiToggle = el("aiToggle");
 
 let state = null;
+let joined = false;
 let selectedForDiscard = new Set();
 
 function cardValue(rank) {
   if (rank === "A") return 1;
-  if (["K", "Q", "J"].includes(rank)) return 10;
+  if (["K","Q","J"].includes(rank)) return 10;
   return parseInt(rank, 10);
 }
 
 function suitClass(suit) {
-  return suit === "♥" || suit === "♦" ? "red" : "black";
+  return (suit === "♥" || suit === "♦") ? "red" : "black";
 }
 
 function makeCardButton(card, opts = {}) {
@@ -98,18 +90,17 @@ function makeCardButton(card, opts = {}) {
   corner2.textContent = card.rank;
 
   btn.append(corner1, big, corner2);
+
   if (opts.onClick) btn.onclick = opts.onClick;
   return btn;
 }
 
-function clamp(n, min, max) {
-  return Math.max(min, Math.min(max, n));
-}
+function clamp(n, min, max) { return Math.max(min, Math.min(max, n)); }
 
 function initTicksOnce() {
   if (!ticks) return;
   if (ticks.childElementCount > 0) return;
-  [0, 30, 60, 90, 121].forEach((n) => {
+  [0, 30, 60, 90, 121].forEach(n => {
     const span = document.createElement("span");
     span.textContent = String(n);
     ticks.appendChild(span);
@@ -117,8 +108,7 @@ function initTicksOnce() {
 }
 
 function setPegPosition(pegEl, score) {
-  if (!pegEl) return;
-  const s = clamp(score ?? 0, 0, 121);
+  const s = clamp(score, 0, 121);
   const pct = (s / 121) * 100;
   pegEl.style.left = `${pct}%`;
 }
@@ -126,28 +116,24 @@ function setPegPosition(pegEl, score) {
 function renderBoard() {
   if (!state) return;
 
-  if (p1Label) p1Label.textContent = state.players?.PLAYER1 || "P1";
-  if (p2Label) p2Label.textContent = state.players?.PLAYER2 || "P2";
+  p1Label.textContent = state.players.PLAYER1 || "P1";
+  p2Label.textContent = state.players.PLAYER2 || "P2";
 
-  setPegPosition(p1Peg, state.scores?.PLAYER1 ?? 0);
-  setPegPosition(p2Peg, state.scores?.PLAYER2 ?? 0);
+  setPegPosition(p1Peg, state.scores.PLAYER1);
+  setPegPosition(p2Peg, state.scores.PLAYER2);
 }
 
 function renderPileAndHud() {
   if (!state) return;
 
-  if (countNum) countNum.textContent = String(state.peg?.count ?? 0);
+  countNum.textContent = String(state.peg?.count ?? 0);
 
-  if (pileArea) {
-    pileArea.innerHTML = "";
-    const pile = state.peg?.pile || [];
-    const show = pile.length > 10 ? pile.slice(pile.length - 10) : pile;
-    for (const c of show) {
-      pileArea.appendChild(makeCardButton(c, { disabled: true }));
-    }
+  pileArea.innerHTML = "";
+  const pile = state.peg?.pile || [];
+  const show = pile.length > 10 ? pile.slice(pile.length - 10) : pile;
+  for (const c of show) {
+    pileArea.appendChild(makeCardButton(c, { disabled: true }));
   }
-
-  if (!peggingStatus || !lastScore) return;
 
   if (state.stage !== "pegging") {
     peggingStatus.textContent = "";
@@ -156,15 +142,11 @@ function renderPileAndHud() {
   }
 
   const myTurn = state.turn === state.me;
-  const mine = state.myHandCount ?? 0;
-  const opp = state.oppHandCount ?? 0;
-
-  peggingStatus.textContent =
-    `${myTurn ? "Your turn" : "Opponent’s turn"} • You: ${mine} card(s) • Opponent: ${opp} card(s)`;
+  peggingStatus.textContent = myTurn ? "Your turn" : "Opponent’s turn";
 
   const ev = state.lastPegEvent;
   if (ev && ev.pts && ev.pts > 0) {
-    const who = ev.player === state.me ? "You" : "Opponent";
+    const who = (ev.player === state.me) ? "You" : "Opponent";
     const reasonText = (ev.reasons || []).join(", ");
     lastScore.textContent = `${who} scored +${ev.pts} (${reasonText})`;
     lastScore.classList.remove("hidden");
@@ -174,7 +156,6 @@ function renderPileAndHud() {
 }
 
 function renderBreakdown(listEl, breakdown) {
-  if (!listEl) return;
   listEl.innerHTML = "";
   if (!breakdown || !breakdown.items || breakdown.items.length === 0) {
     const li = document.createElement("li");
@@ -190,163 +171,154 @@ function renderBreakdown(listEl, breakdown) {
 }
 
 function renderShow() {
-  if (!showPanel) return;
-
   if (!state || state.stage !== "show" || !state.show) {
     showPanel.classList.add("hidden");
     return;
   }
-
   showPanel.classList.remove("hidden");
 
   const cut = state.show.cut;
-  if (cutLine) cutLine.textContent = `Cut: ${cut.rank}${cut.suit}`;
+  cutLine.textContent = `Cut: ${cut.rank}${cut.suit}`;
 
   const nonDealer = state.show.nonDealer;
   const dealer = state.show.dealer;
 
-  if (ndTitle) ndTitle.textContent = `Non-dealer (${nonDealer})`;
-  if (dTitle) dTitle.textContent = `Dealer (${dealer})`;
-  if (cTitle) cTitle.textContent = `Crib (${dealer})`;
+  ndTitle.textContent = `Non-dealer (${state.names?.[nonDealer] || nonDealer})`;
+  dTitle.textContent = `Dealer (${state.names?.[dealer] || dealer})`;
+  cTitle.textContent = `Crib (${state.names?.[dealer] || dealer})`;
 
-  if (ndCards) ndCards.innerHTML = "";
-  if (dCards) dCards.innerHTML = "";
-  if (cCards) cCards.innerHTML = "";
+  ndCards.innerHTML = "";
+  dCards.innerHTML = "";
+  cCards.innerHTML = "";
 
   const nd = state.show.hand[nonDealer];
   const de = state.show.hand[dealer];
   const cr = state.show.crib;
 
-  if (ndCards) {
-    for (const c of nd.cards) ndCards.appendChild(makeCardButton(c, { disabled: true }));
-    ndCards.appendChild(makeCardButton(cut, { disabled: true }));
-  }
+  for (const c of nd.cards) ndCards.appendChild(makeCardButton(c, { disabled: true }));
+  ndCards.appendChild(makeCardButton(cut, { disabled: true }));
 
-  if (dCards) {
-    for (const c of de.cards) dCards.appendChild(makeCardButton(c, { disabled: true }));
-    dCards.appendChild(makeCardButton(cut, { disabled: true }));
-  }
+  for (const c of de.cards) dCards.appendChild(makeCardButton(c, { disabled: true }));
+  dCards.appendChild(makeCardButton(cut, { disabled: true }));
 
-  if (cCards) {
-    for (const c of cr.cards) cCards.appendChild(makeCardButton(c, { disabled: true }));
-    cCards.appendChild(makeCardButton(cut, { disabled: true }));
-  }
+  for (const c of cr.cards) cCards.appendChild(makeCardButton(c, { disabled: true }));
+  cCards.appendChild(makeCardButton(cut, { disabled: true }));
 
   renderBreakdown(ndBreak, nd.breakdown);
   renderBreakdown(dBreak, de.breakdown);
   renderBreakdown(cBreak, cr.breakdown);
 
-  if (ndTotal) ndTotal.textContent = `Total: ${nd.breakdown.total}`;
-  if (dTotal) dTotal.textContent = `Total: ${de.breakdown.total}`;
-  if (cTotal) cTotal.textContent = `Total: ${cr.breakdown.total}`;
+  ndTotal.textContent = `Total: ${nd.breakdown.total}`;
+  dTotal.textContent = `Total: ${de.breakdown.total}`;
+  cTotal.textContent = `Total: ${cr.breakdown.total}`;
+}
+
+function maybeAutoSendDiscard() {
+  if (!state) return;
+  if (state.stage !== "discard") return;
+  if (selectedForDiscard.size !== 2) return;
+
+  // Auto-submit immediately
+  socket.emit("discard_to_crib", { cardIds: Array.from(selectedForDiscard) });
+  selectedForDiscard.clear();
 }
 
 function render() {
   if (!state) return;
 
-  if (tableLine) tableLine.textContent = `Table: ${state.tableId}`;
-  if (meLine) meLine.textContent = `You: ${state.me}`;
+  tableLine.textContent = `Table: ${state.tableId}`;
+  meLine.textContent = `You: ${state.names?.[state.me] || state.me}`;
 
-  const p1 = state.players?.PLAYER1 ? state.players.PLAYER1 : "—";
-  const p2 = state.players?.PLAYER2 ? state.players.PLAYER2 : "—";
-  if (playersLine) playersLine.textContent = `Players: ${p1} vs ${p2}`;
+  const p1 = state.players.PLAYER1 ? state.players.PLAYER1 : "—";
+  const p2 = state.players.PLAYER2 ? state.players.PLAYER2 : "—";
+  playersLine.textContent = `Players: ${p1} vs ${p2}`;
 
-  if (stageLine) stageLine.textContent = `Stage: ${state.stage}`;
-  if (dealerLine) dealerLine.textContent = `Dealer: ${state.dealer}`;
-  if (turnLine) turnLine.textContent = `Turn: ${state.turn}`;
-  if (scoreLine) scoreLine.textContent = `P1 ${state.scores?.PLAYER1 ?? 0} • P2 ${state.scores?.PLAYER2 ?? 0}`;
+  stageLine.textContent = `Stage: ${state.stage}`;
+  dealerLine.textContent = `Dealer: ${state.names?.[state.dealer] || state.dealer}`;
+  turnLine.textContent = `Turn: ${state.names?.[state.turn] || state.turn}`;
 
-  // Crib line: show crib owner
-  const cribOwner = state.dealer; // dealer owns crib for that hand
-  if (cribLine) {
-    cribLine.textContent =
-      `Crib (${cribOwner}) • Discards: P1 ${state.discardsCount?.PLAYER1 ?? 0}/2  P2 ${state.discardsCount?.PLAYER2 ?? 0}/2`;
-  }
+  // score line using names (not P1/P2)
+  const n1 = state.names?.PLAYER1 || "P1";
+  const n2 = state.names?.PLAYER2 || "P2";
+  scoreLine.textContent = `${n1} ${state.scores.PLAYER1} • ${n2} ${state.scores.PLAYER2}`;
+
+  // Crib owner name (dealer owns crib)
+  const cribOwnerName = state.names?.[state.dealer] || state.dealer;
+  cribLine.textContent = `Crib (${cribOwnerName}) • Discards: ${n1} ${state.discardsCount.PLAYER1}/2  ${n2} ${state.discardsCount.PLAYER2}/2`;
 
   initTicksOnce();
   renderBoard();
   renderPileAndHud();
   renderShow();
 
-  // reset buttons/hand area
-  if (discardBtn) {
-    discardBtn.style.display = "none";
-    discardBtn.disabled = true;
-  }
-  if (goBtn) goBtn.style.display = "none";
-  if (nextHandBtn) nextHandBtn.style.display = "none";
-  if (handArea) handArea.innerHTML = "";
+  // reset buttons/areas
+  if (discardBtn) discardBtn.style.display = "none";
+  goBtn.style.display = "none";
+  nextHandBtn.style.display = "none";
 
-  // stages
+  handArea.innerHTML = "";
+
+  // STAGES
   if (state.stage === "lobby") {
-    if (handTitle) handTitle.textContent = "Waiting…";
-    if (handHelp) handHelp.textContent = "Join the same table on another device for 2-player.";
-    if (showPanel) showPanel.classList.add("hidden");
+    handTitle.textContent = "Waiting for crew…";
+    handHelp.textContent = `Open the same table on another device: "${state.tableId}" (or select Play vs AI).`;
+    showPanel.classList.add("hidden");
     return;
   }
 
   if (state.stage === "discard") {
-    if (showPanel) showPanel.classList.add("hidden");
-    if (handTitle) handTitle.textContent = "Discard";
-    if (handHelp) handHelp.textContent = "Select exactly 2 cards to discard to the crib.";
+    showPanel.classList.add("hidden");
 
-    // ✅ REQUIRED: button wording change
-    const cribOwnerName =
-      (state.dealer === "PLAYER1" ? (state.players?.PLAYER1 || "P1") : (state.players?.PLAYER2 || "P2"));
-    if (discardBtn) discardBtn.textContent = `Select cards to send to ${cribOwnerName}'s crib`;
+    const cribOwnerName2 = state.names?.[state.dealer] || state.dealer;
+    handTitle.textContent = "Your Hand";
+    handHelp.textContent = `Select 2 cards to send to ${cribOwnerName2}’s crib. (Auto-sends on 2nd pick.)`;
 
     const myHand = state.myHand || [];
-    myHand.forEach((card) => {
+    myHand.forEach(card => {
       const selected = selectedForDiscard.has(card.id);
       const btn = makeCardButton(card, {
         selected,
         onClick: () => {
+          // toggle selection
           if (selected) selectedForDiscard.delete(card.id);
           else {
             if (selectedForDiscard.size >= 2) return;
             selectedForDiscard.add(card.id);
           }
-          if (discardBtn) discardBtn.disabled = selectedForDiscard.size !== 2;
+
+          // re-render to show highlight
           render();
-        },
+
+          // auto-send when 2 selected
+          maybeAutoSendDiscard();
+        }
       });
-      if (handArea) handArea.appendChild(btn);
+      handArea.appendChild(btn);
     });
 
-    if (discardBtn) {
-      discardBtn.style.display = "inline-block";
-      discardBtn.disabled = selectedForDiscard.size !== 2;
-      discardBtn.onclick = () => {
-        if (selectedForDiscard.size !== 2) return;
-        socket.emit("discard_to_crib", { cardIds: Array.from(selectedForDiscard) });
-        selectedForDiscard.clear();
-        discardBtn.disabled = true;
-      };
-    }
     return;
   }
 
   if (state.stage === "pegging") {
-    if (showPanel) showPanel.classList.add("hidden");
-    if (handTitle) handTitle.textContent = "Pegging";
-    if (handHelp) handHelp.textContent = "Play a card without exceeding 31. If you can’t play, press GO.";
+    showPanel.classList.add("hidden");
+    handTitle.textContent = "Pegging";
+    handHelp.textContent = "Play a card without exceeding 31. If you can’t play, press GO.";
 
     const myTurn = state.turn === state.me;
     const myHand = state.myHand || [];
-    const count = state.peg?.count ?? 0;
+    const count = state.peg.count;
 
-    myHand.forEach((card) => {
-      const playable = myTurn && count + cardValue(card.rank) <= 31;
+    myHand.forEach(card => {
+      const playable = myTurn && (count + cardValue(card.rank) <= 31);
       const btn = makeCardButton(card, {
         disabled: !playable,
-        onClick: () => socket.emit("play_card", { cardId: card.id }),
+        onClick: () => socket.emit("play_card", { cardId: card.id })
       });
-      if (handArea) handArea.appendChild(btn);
+      handArea.appendChild(btn);
     });
 
-    // GO only when it can actually work: your turn, you have cards, and none playable
-    const canPlay = myHand.some((c) => count + cardValue(c.rank) <= 31);
-    if (goBtn && myTurn && myHand.length > 0 && !canPlay) {
+    const canPlay = myHand.some(c => count + cardValue(c.rank) <= 31);
+    if (myTurn && myHand.length > 0 && !canPlay) {
       goBtn.style.display = "inline-block";
       goBtn.onclick = () => socket.emit("go");
     }
@@ -354,73 +326,56 @@ function render() {
   }
 
   if (state.stage === "show") {
-    if (handTitle) handTitle.textContent = "Show";
-    if (handHelp) handHelp.textContent = "Review scoring. Click Next Hand when ready.";
-
-    if (nextHandBtn) {
-      nextHandBtn.style.display = "inline-block";
-      nextHandBtn.onclick = () => socket.emit("next_hand");
-    }
+    handTitle.textContent = "Show";
+    handHelp.textContent = "Review scoring. Click Next Hand when ready.";
+    nextHandBtn.style.display = "inline-block";
+    nextHandBtn.onclick = () => socket.emit("next_hand");
 
     const myHand = state.myHand || [];
-    myHand.forEach((card) => {
-      if (handArea) handArea.appendChild(makeCardButton(card, { disabled: true }));
-    });
-    if (state.cut && handArea) handArea.appendChild(makeCardButton(state.cut, { disabled: true }));
+    myHand.forEach(card => handArea.appendChild(makeCardButton(card, { disabled: true })));
+    if (state.cut) handArea.appendChild(makeCardButton(state.cut, { disabled: true }));
     return;
   }
 }
 
 // JOIN FLOW
 function doJoin() {
-  const name = (nameInput?.value || "").trim().slice(0, 16);
-  const tableId = ((tableInput?.value || "").trim().slice(0, 24)) || "JIM1";
-  const vsAI = !!aiToggle?.checked;
+  const name = (nameInput.value || "").trim().slice(0, 16);
+  const tableId = (tableInput.value || "").trim().slice(0, 24) || "JIM1";
+  if (!name) { alert("Enter a name."); return; }
 
-  if (!name) {
-    alert("Enter a name.");
-    return;
-  }
+  const vsAI = !!(aiToggle && aiToggle.checked);
 
   socket.emit("join_table", { tableId, name, vsAI });
-
-  if (joinOverlay) joinOverlay.style.display = "none";
+  joined = true;
+  joinOverlay.style.display = "none";
 }
 
-function initJoinDefaults() {
+// Pre-fill from URL if present
+(function initJoinDefaults(){
   const qs = new URLSearchParams(location.search);
   const table = (qs.get("table") || "JIM1").toString().trim().slice(0, 24);
   const name = (qs.get("name") || "").toString().trim().slice(0, 16);
+  tableInput.value = table;
+  if (name) nameInput.value = name;
+})();
 
-  if (tableInput) tableInput.value = table;
-  if (name && nameInput) nameInput.value = name;
-}
+nameJoinBtn.onclick = doJoin;
+nameInput.addEventListener("keydown", (e)=>{ if (e.key === "Enter") doJoin(); });
+tableInput.addEventListener("keydown", (e)=>{ if (e.key === "Enter") doJoin(); });
 
-window.addEventListener("DOMContentLoaded", () => {
-  initJoinDefaults();
-
-  if (nameJoinBtn) nameJoinBtn.onclick = doJoin;
-
-  if (nameInput) {
-    nameInput.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") doJoin();
-    });
-  }
-
-  if (tableInput) {
-    tableInput.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") doJoin();
-    });
-  }
-});
-
-// Socket listeners
 socket.on("connect", () => {
-  // intentionally do nothing until Set Sail is clicked
+  // stay idle until player presses Set Sail
 });
 
 socket.on("state", (s) => {
   state = s;
+
+  // If stage changes away from discard, clear any stale selection
+  if (state.stage !== "discard" && selectedForDiscard.size) {
+    selectedForDiscard.clear();
+  }
+
   render();
 });
 

@@ -54,6 +54,7 @@ const cTotal = el("cTotal");
 const joinOverlay = el("joinOverlay");
 const nameInput = el("nameInput");
 const tableInput = el("tableInput");
+const aiToggle = el("aiToggle");
 const nameJoinBtn = el("nameJoinBtn");
 
 let state = null;
@@ -141,7 +142,11 @@ function renderPileAndHud() {
   }
 
   const myTurn = state.turn === state.me;
-  peggingStatus.textContent = myTurn ? "Your turn" : "Opponent’s turn";
+  const myCards = state.myHandCount ?? 0;
+  const oppCards = state.oppHandCount ?? 0;
+
+  peggingStatus.textContent =
+    `${myTurn ? "Your turn" : "Opponent’s turn"} • You: ${myCards} card(s) • Opponent: ${oppCards} card(s)`;
 
   const ev = state.lastPegEvent;
   if (ev && ev.pts && ev.pts > 0) {
@@ -227,8 +232,8 @@ function render() {
   turnLine.textContent = `Turn: ${state.turn}`;
   scoreLine.textContent = `P1 ${state.scores.PLAYER1} • P2 ${state.scores.PLAYER2}`;
 
-  // “Crib (who)”
-  cribLine.textContent = `Crib (${state.dealer}) • Discards: P1 ${state.discardsCount.PLAYER1}/2  P2 ${state.discardsCount.PLAYER2}/2`;
+  cribLine.textContent =
+    `Crib (${state.dealer}) • Discards: P1 ${state.discardsCount.PLAYER1}/2  P2 ${state.discardsCount.PLAYER2}/2`;
 
   initTicksOnce();
   renderBoard();
@@ -243,10 +248,11 @@ function render() {
 
   handArea.innerHTML = "";
 
-  // STAGES
   if (state.stage === "lobby") {
     handTitle.textContent = "Waiting for crew…";
-    handHelp.textContent = `Open the same table on Peggy’s phone: "${state.tableId}".`;
+    handHelp.textContent = state.botEnabled
+      ? "Solo vs AI: you’re sailing against Blackbeard."
+      : `Open the same table on Peggy’s phone: "${state.tableId}".`;
     showPanel.classList.add("hidden");
     return;
   }
@@ -303,7 +309,6 @@ function render() {
       handArea.appendChild(btn);
     });
 
-    // GO only when it can actually work: your turn, you have cards, and none playable
     const canPlay = myHand.some(c => count + cardValue(c.rank) <= 31);
     if (myTurn && myHand.length > 0 && !canPlay) {
       goBtn.style.display = "inline-block";
@@ -314,9 +319,15 @@ function render() {
 
   if (state.stage === "show") {
     handTitle.textContent = "Show";
-    handHelp.textContent = "Review scoring. Click Next Hand when ready.";
-    nextHandBtn.style.display = "inline-block";
-    nextHandBtn.onclick = () => socket.emit("next_hand");
+    handHelp.textContent = state.gameOver
+      ? "Game over. Start the next game from your match controls (if enabled)."
+      : "Review scoring. Click Next Hand when ready.";
+
+    // keep Next Hand for now (safe for both 2P and AI)
+    if (!state.gameOver && !state.matchOver) {
+      nextHandBtn.style.display = "inline-block";
+      nextHandBtn.onclick = () => socket.emit("next_hand");
+    }
 
     const myHand = state.myHand || [];
     myHand.forEach(card => handArea.appendChild(makeCardButton(card, { disabled: true })));
@@ -329,8 +340,11 @@ function render() {
 function doJoin() {
   const name = (nameInput.value || "").trim().slice(0, 16);
   const tableId = (tableInput.value || "").trim().slice(0, 24) || "JIM1";
+  const ai = !!(aiToggle && aiToggle.checked);
+
   if (!name) { alert("Enter a name."); return; }
-  socket.emit("join_table", { tableId, name });
+
+  socket.emit("join_table", { tableId, name, ai });
   joined = true;
   joinOverlay.style.display = "none";
 }
@@ -340,8 +354,14 @@ function doJoin() {
   const qs = new URLSearchParams(location.search);
   const table = (qs.get("table") || "JIM1").toString().trim().slice(0, 24);
   const name = (qs.get("name") || "").toString().trim().slice(0, 16);
+  const ai = (qs.get("ai") || "").toString().trim();
+
   tableInput.value = table;
   if (name) nameInput.value = name;
+
+  if (aiToggle) {
+    aiToggle.checked = (ai === "1" || ai.toLowerCase() === "true" || ai.toLowerCase() === "yes");
+  }
 })();
 
 nameJoinBtn.onclick = doJoin;
@@ -349,7 +369,7 @@ nameInput.addEventListener("keydown", (e)=>{ if (e.key === "Enter") doJoin(); })
 tableInput.addEventListener("keydown", (e)=>{ if (e.key === "Enter") doJoin(); });
 
 socket.on("connect", () => {
-  // stay idle until player presses Set Sail (prevents accidental joins)
+  // idle until Set Sail
 });
 
 socket.on("state", (s) => {

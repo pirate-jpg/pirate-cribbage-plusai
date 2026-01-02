@@ -1,37 +1,30 @@
-# Pirate Cribbage Plus AI — Project Status
+# Pirate Cribbage PlusAI — Project Status
 
-## Repo
-- pirate-cribbage-plusai
+## Current State (as of this update)
+- **Human vs Human mode:** Still supported (join same table on 2 devices).
+- **Play vs AI mode:** Implemented and working server-side.
+  - AI occupies **PLAYER2** as **“AI Captain”**
+  - Table locks to AI mode to prevent accidental second human join
 
-## Current Features (Working)
-- Two-player cribbage (real-time Socket.IO)
-- Join overlay for player names + table code
-- Deal 6, discard 2 to crib
-- Pegging:
-  - 15 / 31
-  - pairs / triples / quads
-  - run scoring
-  - last card
-  - GO logic
-  - no-stall fix when opponent is out of cards and remaining player is blocked
-- Show scoring with breakdown:
-  - 15s / pairs / runs / flush / nobs
-- Game ends at 121
-- Match wins tracked (first to 3)
-- Next hand / next game / new match supported (server)
+## Changes Included
+- `server.js`
+  - Added `vsAI` support to `join_table`
+  - Added AI discard + pegging (play/go) engine with small think delay
+  - AI tables auto-start after human joins (no waiting for PLAYER2 socket)
+  - AI tables reject second human join attempts
+- `public/index.html`
+  - Removed “Peggy” mention
+  - Added AI checkbox id **aiToggle** matching app.js
 
-## New in this update
-- Solo vs AI mode:
-  - Join overlay checkbox “Solo vs AI”
-  - URL param `?ai=1` auto-enables the checkbox
-  - Bot joins as PLAYER2 (“Blackbeard (AI)”) without a second device
-  - Bot auto-discards to crib and plays pegging + GO
+## Known Limitations (intentional for now)
+- AI strategy is **simple** (lowest playable / lowest discard). Next improvement: smarter crib + pegging tactics.
+- AI does not “chat” — only acts through game flow.
 
-## Known limitations (intentional for safety)
-- Human still clicks “Next Hand” (and match/game control flow stays human-driven)
+## Next Requested UI Tweaks (not done yet)
+- Make “GO” announcements more obvious (“Opponent says GO!”)
+- Show crib-owner instruction earlier: “Discard 2 to Jim’s crib”
+- Use **names** instead of “P1/P2” in the score line
 
-## Next possible upgrades
-- Make bot smarter at discard (crib expectation modeling)
-- Add “Next Game” + match UI buttons in the client (already supported server-side)
-- Make bot auto-advance hands/games optionally (toggle)
-- Add difficulty levels (easy/normal/hard)
+## Repo(s)
+- Original: `pirate-cribbage` (leave as stable baseline)
+- AI branch/project: `pirate-cribbage-plusai`

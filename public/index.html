@@ -1,4 +1,3 @@
-<!-- public/index.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -9,6 +8,9 @@
 </head>
 
 <body>
+  <!-- TOAST (non-sticky GO notifications) -->
+  <div id="toast" class="toast"></div>
+
   <!-- JOIN OVERLAY -->
   <div id="joinOverlay" class="overlay">
     <div class="panel overlayCard">
@@ -17,7 +19,7 @@
 
       <div class="overlayRow">
         <div class="overlayLabel">Your name</div>
-        <input id="nameInput" class="nameInput" maxlength="16" placeholder="Captain" />
+        <input id="nameInput" class="nameInput" maxlength="16" placeholder="Captain Jim" />
       </div>
 
       <div class="overlayRow">
@@ -25,14 +27,13 @@
         <input id="tableInput" class="nameInput" maxlength="24" placeholder="JIM1" />
       </div>
 
-      <label class="checkRow">
-        <input id="vsAICheck" type="checkbox" />
-        <span><strong>Play vs AI</strong> <span class="mutedInline">(leave unchecked for 2-player)</span></span>
+      <label class="overlayRow" style="display:flex; gap:10px; align-items:center; margin-top:10px;">
+        <input id="vsAiInput" type="checkbox" />
+        <span class="overlayText" style="margin:0;">Play vs AI</span>
       </label>
 
       <button id="nameJoinBtn" class="btn primary big">Set Sail</button>
-
-      <div class="overlayHint">Tip: For 2-player, open the same table code on another device.</div>
+      <div class="overlayHint">Tip: use the same table code on another device for 2-player.</div>
     </div>
   </div>
 
@@ -51,61 +52,59 @@
 
   <main class="page">
     <section class="grid">
-      <!-- LEFT COLUMN -->
-      <div class="leftCol">
-        <!-- BOARD -->
-        <section class="panel boardPanel woodFrame">
-          <div class="panelHeader">
-            <h2>Cribbage Board</h2>
-            <div class="mutedSmall">Race to 121</div>
-          </div>
 
-          <div class="boardSurface">
-            <div class="track">
-              <div class="lane lane1">
-                <div class="peg peg1" id="p1Peg"></div>
-              </div>
-              <div class="lane lane2">
-                <div class="peg peg2" id="p2Peg"></div>
-              </div>
-              <div class="tickRow" id="ticks"></div>
+      <!-- LEFT TOP: BOARD -->
+      <section class="panel boardPanel woodFrame">
+        <div class="panelHeader">
+          <h2>Cribbage Board</h2>
+          <div class="mutedSmall">Race to 121</div>
+        </div>
+
+        <div class="boardSurface">
+          <div class="track">
+            <div class="lane lane1">
+              <div class="peg peg1" id="p1Peg"></div>
             </div>
-
-            <div class="legend">
-              <div class="dotLine"><span class="dot dot1"></span><span id="p1Label">P1</span></div>
-              <div class="dotLine"><span class="dot dot2"></span><span id="p2Label">P2</span></div>
+            <div class="lane lane2">
+              <div class="peg peg2" id="p2Peg"></div>
             </div>
-          </div>
-        </section>
-
-        <!-- CREW -->
-        <aside class="panel crewPanel">
-          <div class="panelHeader">
-            <h2>⚓ Crew</h2>
-            <div id="playersLine" class="mutedSmall">Players: —</div>
+            <div class="tickRow" id="ticks"></div>
           </div>
 
-          <div class="miniRow">
-            <div class="pill" id="stageLine">Stage: —</div>
-            <div class="pill" id="dealerLine">Dealer: —</div>
-            <div class="pill" id="turnLine">Turn: —</div>
+          <div class="legend">
+            <div class="dotLine"><span class="dot dot1"></span><span id="p1Label">P1</span></div>
+            <div class="dotLine"><span class="dot dot2"></span><span id="p2Label">P2</span></div>
           </div>
+        </div>
+      </section>
 
-          <div class="scoreBlock">
-            <div class="scoreTitle">Game Score</div>
-            <div id="scoreLine" class="scoreText">—</div>
-          </div>
+      <!-- LEFT BOTTOM: CREW -->
+      <aside class="panel crewPanel">
+        <div class="panelHeader">
+          <h2>⚓ Crew</h2>
+          <div id="playersLine" class="mutedSmall">Players: —</div>
+        </div>
 
-          <div class="mutedSmall" id="cribLine">Crib: —</div>
+        <div class="miniRow">
+          <div class="pill" id="stageLine">Stage: —</div>
+          <div class="pill" id="dealerLine">Dealer: —</div>
+          <div class="pill" id="turnLine">Turn: —</div>
+        </div>
 
-          <div class="crewButtons">
-            <button id="newMatchBtn" class="btn primary">New Match</button>
-            <button id="nextGameBtn" class="btn ghost">Next Game</button>
-          </div>
-        </aside>
-      </div>
+        <div class="scoreBlock">
+          <div class="scoreTitle">Game Score</div>
+          <div id="scoreLine" class="scoreText">—</div>
+        </div>
 
-      <!-- RIGHT COLUMN: PLAY -->
+        <div class="scoreBlock">
+          <div class="scoreTitle">Match Score</div>
+          <div id="matchLine" class="scoreText">—</div>
+        </div>
+
+        <div class="mutedSmall" id="cribLine">Crib: —</div>
+      </aside>
+
+      <!-- RIGHT: PLAY -->
       <section class="panel playPanel">
         <div class="panelHeader">
           <h2 id="handTitle">Waiting…</h2>
@@ -133,8 +132,10 @@
 
         <div class="handBlock">
           <div class="actionRow">
-            <button id="goBtn" class="btn go">GO</button>
-            <button id="nextHandBtn" class="btn primary">Next Hand</button>
+            <button id="discardBtn" class="btn primary" style="display:none;">Send to Crib</button>
+            <button id="goBtn" class="btn go" style="display:none;">GO</button>
+            <button id="nextHandBtn" class="btn primary" style="display:none;">Next Hand</button>
+            <button id="newMatchBtn" class="btn primary" style="display:none;">New Match</button>
           </div>
 
           <div id="handArea" class="handArea"></div>
@@ -172,6 +173,7 @@
         </div>
 
       </section>
+
     </section>
   </main>
 

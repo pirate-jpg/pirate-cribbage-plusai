@@ -22,9 +22,6 @@ body{
     radial-gradient(900px 600px at 75% 70%, #0b2f43 0%, var(--bg0) 70%);
 }
 
-/* Hide action buttons until JS decides to show them (prevents "ghost" UI on load) */
-#discardBtn, #goBtn, #nextHandBtn { display:none; }
-
 /* Top bar */
 .topbar{
   display:flex;
@@ -49,15 +46,39 @@ body{
 }
 
 /* Layout */
-.page{ padding:18px; }
+.page{
+  padding:18px;
+  max-width: 1500px;
+  margin: 0 auto;
+}
+
+/*
+  Consistent layout:
+  Left column: Board + Crew (stacked)
+  Right column: Play
+*/
 .grid{
   display:grid;
-  grid-template-columns: 360px 1fr 520px;
+  grid-template-columns: 420px minmax(520px, 1fr);
+  grid-template-areas:
+    "board play"
+    "crew  play";
   gap:18px;
   align-items:start;
 }
-@media (max-width: 1300px){
-  .grid{ grid-template-columns: 1fr; }
+
+.boardPanel{ grid-area: board; }
+.crewPanel{ grid-area: crew; }
+.playPanel{ grid-area: play; }
+
+@media (max-width: 1100px){
+  .grid{
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "board"
+      "crew"
+      "play";
+  }
 }
 
 .panel{
@@ -67,10 +88,11 @@ body{
   box-shadow: var(--shadow);
   padding:16px;
 }
+
 .panelHeader{ display:flex; flex-direction:column; gap:4px; margin-bottom:12px; }
 .panelHeader h2{ margin:0; font-size:18px; }
 .mutedSmall{ color:var(--muted); font-size:12px; }
-
+.mutedInline{ color:var(--muted); font-size:12px; margin-left:6px; }
 .spread{ flex-direction:row; align-items:center; justify-content:space-between; }
 
 .miniRow{ display:flex; gap:8px; flex-wrap:wrap; margin:10px 0 14px; }
@@ -91,7 +113,9 @@ body{
   background:#00000018;
 }
 .scoreTitle{ font-size:12px; color:var(--muted); margin-bottom:6px; }
-.scoreText{ font-size:16px; font-weight:800; }
+.scoreText{ font-size:16px; font-weight:900; }
+
+.matchLine{ color: var(--muted); font-size: 12px; margin-bottom: 10px; }
 
 .matchGrid{
   display:grid;
@@ -99,8 +123,8 @@ body{
   align-items:center;
   gap:10px;
 }
-.matchName{ font-weight:800; }
-.vs{ opacity:0.8; font-size:18px; }
+.matchName{ font-weight:900; }
+.vs{ opacity:0.85; font-size:18px; }
 .pips{ display:flex; gap:6px; margin-top:8px; flex-wrap:wrap; }
 .pip{
   width:14px; height:14px;
@@ -126,15 +150,6 @@ body{
   padding:14px;
   background: linear-gradient(180deg, #00000033 0%, #00000011 100%);
   border:1px solid #ffffff22;
-}
-.boardTitle{
-  text-align:center;
-  font-weight:900;
-  letter-spacing:1px;
-  font-size:12px;
-  color:#f3e7cf;
-  margin-bottom:10px;
-  opacity:0.95;
 }
 .track{
   position:relative;
@@ -192,6 +207,10 @@ body{
   gap:14px;
   margin-bottom:12px;
 }
+@media (max-width: 700px){
+  .hudRow{ grid-template-columns: 1fr; }
+}
+
 .countBox{
   border:1px solid var(--line);
   border-radius:16px;
@@ -216,7 +235,18 @@ body{
   padding:14px;
 }
 .statusTitle{ font-size:12px; color:var(--muted); margin-bottom:6px; }
-.statusText{ font-size:15px; font-weight:700; }
+.statusText{ font-size:15px; font-weight:900; }
+
+.goCallout{
+  margin-top:10px;
+  padding:10px 12px;
+  border-radius:12px;
+  border:1px solid #ffffff22;
+  background: #00000030;
+  color: #ffe8b0;
+  font-weight:1000;
+}
+
 .lastScore{
   margin-top:10px;
   padding:10px 12px;
@@ -224,8 +254,9 @@ body{
   border:1px solid #ffffff22;
   background:#00000025;
   color:#ffe8b0;
-  font-weight:800;
+  font-weight:900;
 }
+
 .hidden{ display:none !important; }
 
 .pileBlock{
@@ -246,7 +277,7 @@ body{
   border-radius:12px;
   padding:10px 14px;
   cursor:pointer;
-  font-weight:800;
+  font-weight:900;
 }
 .btn:hover{ filter:brightness(1.06); }
 .btn.primary{
@@ -270,6 +301,11 @@ body{
   padding:14px 18px;
   font-size:18px;
   border-radius:14px;
+}
+
+.disabledBtn{
+  opacity:0.5;
+  cursor:not-allowed;
 }
 
 /* Hand */
@@ -333,6 +369,7 @@ body{
   opacity:0.95;
 }
 
+/* Selection highlight (NO BLUE/WHITE) */
 .cardBtn.selected{
   outline: 4px solid var(--amber);
   outline-offset: 3px;
@@ -357,7 +394,7 @@ body{
 .breakList{ margin:0; padding-left:18px; color:var(--muted); }
 .totalLine{ margin-top:10px; font-weight:1000; color:var(--gold); }
 
-/* Overlay Join */
+/* Overlay Join + Winner */
 .overlay{
   position:fixed;
   inset:0;
@@ -367,10 +404,9 @@ body{
   justify-content:center;
   padding:18px;
   z-index:9999;
-  backdrop-filter: blur(7px);
 }
 .overlayCard{
-  width:min(520px, 95vw);
+  width:min(560px, 95vw);
   border-radius:18px;
   padding:18px;
   box-shadow: var(--shadow);
@@ -378,6 +414,7 @@ body{
 .overlayTitle{ margin:0 0 6px; font-size:22px; }
 .overlayText{ margin:0 0 14px; color:var(--muted); }
 .overlayRow{ display:flex; flex-direction:column; gap:6px; margin-bottom:10px; }
+.overlayActions{ flex-direction:row; gap:12px; flex-wrap:wrap; }
 .overlayLabel{ font-size:12px; color:var(--muted); }
 .nameInput{
   padding:12px 12px;
@@ -385,17 +422,15 @@ body{
   border:1px solid #ffffff2a;
   background:#00000022;
   color:var(--text);
-  font-weight:800;
+  font-weight:900;
 }
 .overlayHint{ margin-top:12px; color:#d5c8a6; font-size:12px; opacity:0.9; }
 
-/* ✅ When overlay is up, lock and "ghost-proof" the app behind it */
-body.modal-open{
-  overflow:hidden;
+.checkRow{
+  display:flex;
+  gap:10px;
+  align-items:center;
+  color: var(--text);
+  font-weight:800;
 }
-body.modal-open .topbar,
-body.modal-open .page{
-  filter: blur(8px) saturate(0.9);
-  pointer-events:none;
-  user-select:none;
-}
+.checkRow input{ transform: scale(1.2); }

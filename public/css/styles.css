@@ -1,5 +1,6 @@
 :root{
   --bg0:#071a26;
+  --bg1:#0b2a3b;
   --panel:#0b2a3bdd;
   --line:#ffffff22;
   --text:#f6f1df;
@@ -8,14 +9,6 @@
   --amber:#e3a018;
   --danger:#d24a3a;
   --shadow: 0 18px 60px #00000066;
-
-  /* Rope + wood palette */
-  --ropeA:#d6b47c;
-  --ropeB:#b88c50;
-  --ropeShadow:#00000055;
-  --wood0:#3a2a1d;
-  --wood1:#2a1d14;
-  --wood2:#1f140e;
 }
 
 *{ box-sizing:border-box; }
@@ -29,58 +22,10 @@ body{
     radial-gradient(900px 600px at 75% 70%, #0b2f43 0%, var(--bg0) 70%);
 }
 
-/* =========================
-   Rope border utility
-   ========================= */
-.ropeFrame{
-  position:relative;
-  border-radius:18px;
-}
-.ropeFrame::before{
-  content:"";
-  position:absolute;
-  inset:-10px;
-  border-radius:22px;
-  pointer-events:none;
+/* Hide action buttons until JS decides to show them (prevents "ghost" UI on load) */
+#discardBtn, #goBtn, #nextHandBtn { display:none; }
 
-  /* A braided rope look using layered repeating gradients */
-  background:
-    /* outer shadow */
-    radial-gradient(closest-side, transparent 72%, var(--ropeShadow) 100%),
-
-    /* braid strands */
-    repeating-linear-gradient(
-      45deg,
-      #0000 0 6px,
-      #0000 6px,
-      rgba(0,0,0,0.20) 6px 8px,
-      #0000 8px 16px
-    ),
-    repeating-linear-gradient(
-      -45deg,
-      #0000 0 6px,
-      #0000 6px,
-      rgba(255,255,255,0.10) 6px 8px,
-      #0000 8px 16px
-    ),
-
-    /* rope base */
-    linear-gradient(180deg, var(--ropeA) 0%, var(--ropeB) 100%);
-
-  /* cut out the middle so it becomes a border */
-  -webkit-mask:
-    linear-gradient(#000 0 0) content-box,
-    linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
-
-  padding:10px;
-  filter: drop-shadow(0 10px 18px rgba(0,0,0,0.55));
-}
-
-/* =========================
-   Top bar
-   ========================= */
+/* Top bar */
 .topbar{
   display:flex;
   align-items:center;
@@ -94,7 +39,6 @@ body{
 .title{ font-weight:800; font-size:20px; letter-spacing:0.5px; }
 .subtitle{ font-size:12px; color:var(--muted); margin-left:8px; }
 
-.topmeta{ display:flex; gap:10px; }
 .chip{
   border:1px solid var(--line);
   padding:6px 10px;
@@ -104,28 +48,20 @@ body{
   background:#00000022;
 }
 
-/* =========================
-   Layout
-   ========================= */
+/* Layout */
 .page{ padding:18px; }
 .grid{
   display:grid;
-  grid-template-columns: 360px 1fr;
-  grid-template-rows: auto auto;
+  grid-template-columns: 360px 1fr 520px;
   gap:18px;
   align-items:start;
 }
-.boardPanel{ grid-column:1; grid-row:1; }
-.crewPanel{ grid-column:1; grid-row:2; }
-.playPanel{ grid-column:2; grid-row:1 / span 2; }
-
-@media (max-width: 1100px){
-  .grid{ grid-template-columns: 1fr; grid-template-rows: auto; }
-  .boardPanel, .crewPanel, .playPanel{ grid-column:auto; grid-row:auto; }
+@media (max-width: 1300px){
+  .grid{ grid-template-columns: 1fr; }
 }
 
 .panel{
-  background: linear-gradient(180deg, rgba(11,47,67,0.80) 0%, rgba(7,31,45,0.82) 100%);
+  background: linear-gradient(180deg, #0b2f43cc 0%, #071f2dcc 100%);
   border:1px solid var(--line);
   border-radius:18px;
   box-shadow: var(--shadow);
@@ -134,6 +70,7 @@ body{
 .panelHeader{ display:flex; flex-direction:column; gap:4px; margin-bottom:12px; }
 .panelHeader h2{ margin:0; font-size:18px; }
 .mutedSmall{ color:var(--muted); font-size:12px; }
+
 .spread{ flex-direction:row; align-items:center; justify-content:space-between; }
 
 .miniRow{ display:flex; gap:8px; flex-wrap:wrap; margin:10px 0 14px; }
@@ -145,7 +82,8 @@ body{
   color:var(--muted);
   font-size:12px;
 }
-.scoreBlock{
+
+.scoreBlock, .matchBlock{
   margin-top:12px;
   padding:12px;
   border-radius:14px;
@@ -153,135 +91,76 @@ body{
   background:#00000018;
 }
 .scoreTitle{ font-size:12px; color:var(--muted); margin-bottom:6px; }
-.scoreText{ font-size:16px; font-weight:900; }
+.scoreText{ font-size:16px; font-weight:800; }
 
-/* =========================
-   Cribbage board: more realistic wood + edge + subtle grain
-   ========================= */
+.matchGrid{
+  display:grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items:center;
+  gap:10px;
+}
+.matchName{ font-weight:800; }
+.vs{ opacity:0.8; font-size:18px; }
+.pips{ display:flex; gap:6px; margin-top:8px; flex-wrap:wrap; }
+.pip{
+  width:14px; height:14px;
+  border-radius:50%;
+  border:1px solid var(--line);
+  background:#00000033;
+}
+.pip.on{ background: var(--gold); border-color: #00000055; }
+
+.crewButtons{ margin-top:12px; display:flex; gap:10px; }
+
+/* Board */
 .woodFrame{
-  position:relative;
   border-radius:18px;
-  border:1px solid rgba(255,255,255,0.12);
+  border:1px solid #ffffff22;
+  background:
+    radial-gradient(900px 600px at 30% 20%, #2b2118 0%, #1a1310 55%),
+    linear-gradient(180deg, #00000035 0%, #00000000 30%);
   padding:14px;
-
-  /* deeper wood base */
-  background:
-    radial-gradient(900px 600px at 30% 20%, rgba(255,255,255,0.05) 0%, rgba(0,0,0,0.00) 55%),
-    radial-gradient(900px 600px at 70% 90%, rgba(0,0,0,0.35) 0%, rgba(0,0,0,0.00) 55%),
-    linear-gradient(180deg, rgba(0,0,0,0.35) 0%, rgba(0,0,0,0.05) 45%, rgba(0,0,0,0.25) 100%),
-    linear-gradient(90deg, var(--wood0) 0%, var(--wood1) 40%, var(--wood2) 100%);
-
-  box-shadow: 0 20px 70px rgba(0,0,0,0.55);
 }
-
-/* Rope border applied to board */
-.boardPanel{
-  position:relative;
-}
-.boardPanel.ropeFrame{ /* optional if you later add class in HTML */ }
-
-/* We can apply rope to board without HTML change by attaching to woodFrame */
-.woodFrame::before{
-  content:"";
-  position:absolute;
-  inset:-10px;
-  border-radius:22px;
-  pointer-events:none;
-
-  background:
-    radial-gradient(closest-side, transparent 72%, rgba(0,0,0,0.55) 100%),
-    repeating-linear-gradient(
-      45deg,
-      rgba(255,255,255,0.10) 0 2px,
-      rgba(0,0,0,0.00) 2px 10px
-    ),
-    repeating-linear-gradient(
-      -45deg,
-      rgba(0,0,0,0.20) 0 2px,
-      rgba(0,0,0,0.00) 2px 10px
-    ),
-    linear-gradient(180deg, var(--ropeA) 0%, var(--ropeB) 100%);
-
-  -webkit-mask:
-    linear-gradient(#000 0 0) content-box,
-    linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
-
-  padding:10px;
-  filter: drop-shadow(0 10px 18px rgba(0,0,0,0.55));
-}
-
 .boardSurface{
-  position:relative;
   border-radius:16px;
   padding:14px;
-  border:1px solid rgba(255,255,255,0.16);
-
-  /* board face: grain bands + vignette */
-  background:
-    radial-gradient(700px 400px at 50% 20%, rgba(255,255,255,0.08) 0%, rgba(0,0,0,0.00) 60%),
-    radial-gradient(800px 600px at 50% 90%, rgba(0,0,0,0.35) 0%, rgba(0,0,0,0.00) 55%),
-
-    /* subtle “grain” */
-    repeating-linear-gradient(
-      90deg,
-      rgba(255,255,255,0.03) 0 6px,
-      rgba(0,0,0,0.00) 6px 18px
-    ),
-    repeating-linear-gradient(
-      0deg,
-      rgba(0,0,0,0.06) 0 1px,
-      rgba(0,0,0,0.00) 1px 10px
-    ),
-
-    linear-gradient(180deg, rgba(0,0,0,0.20) 0%, rgba(0,0,0,0.08) 100%);
+  background: linear-gradient(180deg, #00000033 0%, #00000011 100%);
+  border:1px solid #ffffff22;
 }
-
+.boardTitle{
+  text-align:center;
+  font-weight:900;
+  letter-spacing:1px;
+  font-size:12px;
+  color:#f3e7cf;
+  margin-bottom:10px;
+  opacity:0.95;
+}
 .track{
   position:relative;
   padding:12px 10px 28px;
   border-radius:14px;
-  border:1px solid rgba(255,255,255,0.14);
-
-  background:
-    radial-gradient(300px 180px at 20% 40%, rgba(255,255,255,0.06) 0%, rgba(0,0,0,0.00) 60%),
-    radial-gradient(340px 200px at 75% 80%, rgba(0,0,0,0.30) 0%, rgba(0,0,0,0.00) 60%),
-    linear-gradient(180deg, rgba(0,0,0,0.25) 0%, rgba(0,0,0,0.05) 100%),
-    repeating-linear-gradient(
-      90deg,
-      rgba(255,255,255,0.04) 0 10px,
-      rgba(0,0,0,0.00) 10px 30px
-    );
+  border:1px solid #ffffff1f;
+  background: linear-gradient(180deg, #2a2018aa 0%, #1b140faa 100%);
 }
-
 .lane{
   height:38px;
   border-radius:999px;
-  border:1px solid rgba(255,255,255,0.10);
+  border:1px solid #ffffff1a;
   margin:10px 0;
   position:relative;
   overflow:hidden;
-
   background:
-    /* hole-ish feel */
-    repeating-radial-gradient(
-      circle at 10px 50%,
-      rgba(0,0,0,0.30) 0 1px,
-      rgba(0,0,0,0.00) 1px 8px
-    ),
-    repeating-linear-gradient(90deg, rgba(255,255,255,0.05) 0 1px, transparent 1px 12px),
-    linear-gradient(180deg, rgba(0,0,0,0.25) 0%, rgba(0,0,0,0.05) 100%);
+    repeating-linear-gradient(90deg, #ffffff0e 0 1px, transparent 1px 8px);
 }
-
 .peg{
   width:18px; height:18px;
   border-radius:50%;
   position:absolute;
   top:50%;
   transform:translate(-50%,-50%);
-  border:2px solid rgba(0,0,0,0.55);
-  box-shadow: 0 6px 12px rgba(0,0,0,0.55);
+  border:2px solid #00000066;
+  box-shadow: 0 6px 12px #00000066;
 }
 .peg1{ background:#42d3ff; }
 .peg2{ background:#ff4aa8; }
@@ -290,7 +169,7 @@ body{
   display:flex;
   justify-content:space-between;
   font-size:11px;
-  color:rgba(232,217,184,0.80);
+  color:#e8d9b8cc;
   margin-top:8px;
   padding:0 6px;
 }
@@ -306,9 +185,7 @@ body{
 .dot1{ background:#42d3ff; }
 .dot2{ background:#ff4aa8; }
 
-/* =========================
-   Gameplay panel
-   ========================= */
+/* Gameplay panel */
 .hudRow{
   display:grid;
   grid-template-columns: 180px 1fr;
@@ -339,15 +216,15 @@ body{
   padding:14px;
 }
 .statusTitle{ font-size:12px; color:var(--muted); margin-bottom:6px; }
-.statusText{ font-size:15px; font-weight:800; }
+.statusText{ font-size:15px; font-weight:700; }
 .lastScore{
   margin-top:10px;
   padding:10px 12px;
   border-radius:12px;
-  border:1px solid rgba(255,255,255,0.16);
+  border:1px solid #ffffff22;
   background:#00000025;
   color:#ffe8b0;
-  font-weight:900;
+  font-weight:800;
 }
 .hidden{ display:none !important; }
 
@@ -369,23 +246,26 @@ body{
   border-radius:12px;
   padding:10px 14px;
   cursor:pointer;
-  font-weight:900;
+  font-weight:800;
 }
 .btn:hover{ filter:brightness(1.06); }
 .btn.primary{
   background: linear-gradient(180deg, #2c5b63 0%, #163743 100%);
   border-color:#ffffff33;
 }
+.btn.ghost{ background:#00000010; }
+
 .btn.go{
   background: linear-gradient(180deg, #ff7a4d 0%, var(--danger) 100%);
   border-color:#00000055;
   color:#1b0b08;
   font-weight:1000;
-  padding:12px 22px;
+  padding:12px 20px;
   border-radius:14px;
-  box-shadow: 0 10px 24px rgba(0,0,0,0.55);
+  box-shadow: 0 10px 24px #00000066;
 }
 .btn.go:hover{ transform: translateY(-1px); }
+
 .btn.big{
   padding:14px 18px;
   font-size:18px;
@@ -419,15 +299,16 @@ body{
   width:86px;
   height:128px;
   border-radius:14px;
-  border:2px solid rgba(0,0,0,0.45);
+  border:2px solid #00000055;
   background: #f4f0e6;
   color:#111;
-  box-shadow: 0 12px 30px rgba(0,0,0,0.35);
+  box-shadow: 0 12px 30px #0000004a;
   position:relative;
   cursor:pointer;
   padding:0;
 }
 .cardBtn:hover{ transform: translateY(-2px); }
+
 .cardBtn.red{ color:#b51f1f; }
 .cardBtn.black{ color:#111; }
 
@@ -452,14 +333,13 @@ body{
   opacity:0.95;
 }
 
-/* Selection highlight (no blue/white) */
 .cardBtn.selected{
   outline: 4px solid var(--amber);
   outline-offset: 3px;
   box-shadow:
-    0 0 0 2px rgba(0,0,0,0.55),
-    0 18px 40px rgba(0,0,0,0.45),
-    0 0 28px rgba(227,160,24,0.35);
+    0 0 0 2px #00000088,
+    0 18px 40px #00000066,
+    0 0 28px #e3a01855;
 }
 
 /* Show panel */
@@ -477,7 +357,7 @@ body{
 .breakList{ margin:0; padding-left:18px; color:var(--muted); }
 .totalLine{ margin-top:10px; font-weight:1000; color:var(--gold); }
 
-/* Overlay */
+/* Overlay Join */
 .overlay{
   position:fixed;
   inset:0;
@@ -487,8 +367,14 @@ body{
   justify-content:center;
   padding:18px;
   z-index:9999;
+  backdrop-filter: blur(7px);
 }
-.overlayCard{ width:min(520px, 95vw); }
+.overlayCard{
+  width:min(520px, 95vw);
+  border-radius:18px;
+  padding:18px;
+  box-shadow: var(--shadow);
+}
 .overlayTitle{ margin:0 0 6px; font-size:22px; }
 .overlayText{ margin:0 0 14px; color:var(--muted); }
 .overlayRow{ display:flex; flex-direction:column; gap:6px; margin-bottom:10px; }
@@ -496,9 +382,20 @@ body{
 .nameInput{
   padding:12px 12px;
   border-radius:12px;
-  border:1px solid rgba(255,255,255,0.18);
+  border:1px solid #ffffff2a;
   background:#00000022;
   color:var(--text);
-  font-weight:900;
+  font-weight:800;
 }
 .overlayHint{ margin-top:12px; color:#d5c8a6; font-size:12px; opacity:0.9; }
+
+/* ✅ When overlay is up, lock and "ghost-proof" the app behind it */
+body.modal-open{
+  overflow:hidden;
+}
+body.modal-open .topbar,
+body.modal-open .page{
+  filter: blur(8px) saturate(0.9);
+  pointer-events:none;
+  user-select:none;
+}

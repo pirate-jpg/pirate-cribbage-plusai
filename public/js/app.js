@@ -1,3 +1,4 @@
+// public/js/app.js
 const socket = io();
 const el = (id) => document.getElementById(id);
 
@@ -5,38 +6,28 @@ const el = (id) => document.getElementById(id);
 const tableLine = el("tableLine");
 const meLine = el("meLine");
 
-// Crew panel
+// Crew
 const playersLine = el("playersLine");
 const stageLine = el("stageLine");
 const dealerLine = el("dealerLine");
 const turnLine = el("turnLine");
 const scoreLine = el("scoreLine");
 const cribLine = el("cribLine");
-const p1Wins = el("p1Wins");
-const p2Wins = el("p2Wins");
-const p1Name = el("p1Name");
-const p2Name = el("p2Name");
 
-// Buttons
-const newMatchBtn = el("newMatchBtn");
-const nextGameBtn = el("nextGameBtn");
-
-// Play panel
+// Play
 const handTitle = el("handTitle");
 const handHelp = el("handHelp");
 const handArea = el("handArea");
 const goBtn = el("goBtn");
 const nextHandBtn = el("nextHandBtn");
+const nextGameBtn = el("nextGameBtn");
+const newMatchBtn = el("newMatchBtn");
 
 // Pegging HUD
 const pileArea = el("pileArea");
 const countNum = el("countNum");
 const peggingStatus = el("peggingStatus");
 const lastScore = el("lastScore");
-
-// Game Over banner
-const gameOverBanner = el("gameOverBanner");
-const gameOverText = el("gameOverText");
 
 // Board
 const p1Peg = el("p1Peg");
@@ -45,7 +36,7 @@ const p1Label = el("p1Label");
 const p2Label = el("p2Label");
 const ticks = el("ticks");
 
-// Show panel
+// Show
 const showPanel = el("showPanel");
 const cutLine = el("cutLine");
 const ndTitle = el("ndTitle");
@@ -65,30 +56,26 @@ const cTotal = el("cTotal");
 const joinOverlay = el("joinOverlay");
 const nameInput = el("nameInput");
 const tableInput = el("tableInput");
-const vsAiCheck = el("vsAiCheck");
+const vsAICheck = el("vsAICheck");
 const nameJoinBtn = el("nameJoinBtn");
 
 let state = null;
-
-// Discard selection UX fix:
+let joined = false;
 let selectedForDiscard = new Set();
-let discardPending = false;         // waiting for server confirmation
-let pendingDiscardIds = [];         // to keep highlight stable
-
-let lastSeenActionSig = "";
+let lastGoSeqSeen = 0;
 
 function cardValue(rank) {
   if (rank === "A") return 1;
   if (["K","Q","J"].includes(rank)) return 10;
   return parseInt(rank, 10);
 }
-
 function suitClass(suit) {
   return (suit === "♥" || suit === "♦") ? "red" : "black";
 }
 
 function makeCardButton(card, opts = {}) {
   const btn = document.createElement("button");
+  btn.type = "button";
   btn.className = `cardBtn ${suitClass(card.suit)}`;
   if (opts.selected) btn.classList.add("selected");
   if (opts.disabled) btn.disabled = true;
@@ -107,7 +94,14 @@ function makeCardButton(card, opts = {}) {
 
   btn.append(corner1, big, corner2);
 
-  if (opts.onClick) btn.onclick = opts.onClick;
+  if (opts.onClick) {
+    // Use pointerdown for faster/cleaner selection (fixes "needs 2-3 clicks")
+    btn.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      opts.onClick();
+    }, { passive: false });
+  }
+
   return btn;
 }
 
@@ -129,69 +123,40 @@ function setPegPosition(pegEl, score) {
   pegEl.style.left = `${pct}%`;
 }
 
+function myName() {
+  if (!state) return "You";
+  return state.names?.[state.me] || state.players?.[state.me] || state.me;
+}
+function oppId() {
+  return state ? (state.me === "PLAYER1" ? "PLAYER2" : "PLAYER1") : "PLAYER2";
+}
+function oppName() {
+  if (!state) return "Opponent";
+  const oid = oppId();
+  return state.names?.[oid] || state.players?.[oid] || oid;
+}
+function dealerName() {
+  if (!state) return "Dealer";
+  return state.names?.[state.dealer] || state.dealer;
+}
+function turnName() {
+  if (!state) return "Turn";
+  return state.names?.[state.turn] || state.turn;
+}
+
 function renderBoard() {
   if (!state) return;
 
-  p1Label.textContent = state.players.PLAYER1 || "P1";
-  p2Label.textContent = state.players.PLAYER2 || "P2";
+  p1Label.textContent = state.names?.PLAYER1 || state.players?.PLAYER1 || "P1";
+  p2Label.textContent = state.names?.PLAYER2 || state.players?.PLAYER2 || "P2";
 
   setPegPosition(p1Peg, state.scores.PLAYER1);
   setPegPosition(p2Peg, state.scores.PLAYER2);
 }
 
-function setPips(elPips, count, target) {
-  if (!elPips) return;
-  elPips.innerHTML = "";
-  for (let i = 0; i < target; i++) {
-    const d = document.createElement("div");
-    d.className = "pip" + (i < count ? " on" : "");
-    elPips.appendChild(d);
-  }
-}
-
-function renderMatch() {
-  if (!state) return;
-  if (!p1Wins || !p2Wins || !p1Name || !p2Name) return;
-
-  const n1 = state.players.PLAYER1 || "P1";
-  const n2 = state.players.PLAYER2 || "P2";
-  p1Name.textContent = n1;
-  p2Name.textContent = n2;
-
-  setPips(p1Wins, state.matchWins?.PLAYER1 || 0, state.matchTarget || 3);
-  setPips(p2Wins, state.matchWins?.PLAYER2 || 0, state.matchTarget || 3);
-}
-
-function renderGoAndLastAction() {
-  if (!state) return;
-
-  const a = state.lastAction;
-  const sig = a ? `${a.type}|${a.player}|${a.msg}` : "";
-  if (sig && sig !== lastSeenActionSig) {
-    lastSeenActionSig = sig;
-
-    if (a.type === "go" && a.player && a.player !== state.me) {
-      const oppName = state.names?.[a.player] || "Opponent";
-      lastScore.textContent = `${oppName} said GO!`;
-      lastScore.classList.remove("hidden");
-      lastScore.classList.add("goCallout");
-    } else {
-      lastScore.classList.remove("goCallout");
-    }
-
-    if (a.type === "gameover") {
-      gameOverBanner.classList.remove("hidden");
-      gameOverText.textContent = a.msg || "Game over!";
-    }
-  }
-
-  if (state.gameOver) {
-    gameOverBanner.classList.remove("hidden");
-    const winner = state.gameWinner ? (state.names?.[state.gameWinner] || state.gameWinner) : "Winner";
-    gameOverText.textContent = `${winner} wins!`;
-  } else {
-    gameOverBanner.classList.add("hidden");
-  }
+function showBigMessage(text) {
+  lastScore.textContent = text;
+  lastScore.classList.remove("hidden");
 }
 
 function renderPileAndHud() {
@@ -208,20 +173,33 @@ function renderPileAndHud() {
 
   if (state.stage !== "pegging") {
     peggingStatus.textContent = "";
+    lastScore.classList.add("hidden");
     return;
   }
 
   const myTurn = state.turn === state.me;
-  peggingStatus.textContent =
-    `${myTurn ? "Your turn" : "Opponent’s turn"} • You: ${state.myHandCount} • Opponent: ${state.oppHandCount}`;
 
+  // GO announcements (very obvious)
+  const goEv = state.lastGoEvent;
+  if (goEv && goEv.seq && goEv.seq !== lastGoSeqSeen) {
+    lastGoSeqSeen = goEv.seq;
+    const who = (goEv.player === state.me) ? myName() : oppName();
+    showBigMessage(`☠️ ${who} says GO!`);
+  }
+
+  // Regular status line
+  const mine = state.myHandCount ?? 0;
+  const opp = state.oppHandCount ?? 0;
+  peggingStatus.textContent = myTurn
+    ? `Your turn • You: ${mine} card(s) • Opponent: ${opp} card(s)`
+    : `Opponent’s turn • You: ${mine} card(s) • Opponent: ${opp} card(s)`;
+
+  // Peg scoring banner (overrides if present)
   const ev = state.lastPegEvent;
   if (ev && ev.pts && ev.pts > 0) {
-    const who = (ev.player === state.me) ? "You" : "Opponent";
+    const who = (ev.player === state.me) ? myName() : oppName();
     const reasonText = (ev.reasons || []).join(", ");
-    lastScore.textContent = `${who} scored +${ev.pts} (${reasonText})`;
-    lastScore.classList.remove("hidden");
-    lastScore.classList.remove("goCallout");
+    showBigMessage(`🏴‍☠️ ${who} scored +${ev.pts} (${reasonText})`);
   }
 }
 
@@ -253,12 +231,9 @@ function renderShow() {
   const nonDealer = state.show.nonDealer;
   const dealer = state.show.dealer;
 
-  const ndName = state.names?.[nonDealer] || nonDealer;
-  const dName = state.names?.[dealer] || dealer;
-
-  ndTitle.textContent = `Non-dealer (${ndName})`;
-  dTitle.textContent = `Dealer (${dName})`;
-  cTitle.textContent = `Crib (${dName})`;
+  ndTitle.textContent = `Non-dealer (${state.names?.[nonDealer] || nonDealer})`;
+  dTitle.textContent = `Dealer (${state.names?.[dealer] || dealer})`;
+  cTitle.textContent = `Crib (${state.names?.[dealer] || dealer})`;
 
   ndCards.innerHTML = "";
   dCards.innerHTML = "";
@@ -286,75 +261,70 @@ function renderShow() {
   cTotal.textContent = `Total: ${cr.breakdown.total}`;
 }
 
-function syncDiscardPendingFromState() {
-  if (!state) return;
-
-  // If we were pending and server now shows we discarded (or stage moved on), clear pending
-  const mine = state.me;
-  const mineDiscarded = state.discardsCount?.[mine] === 2;
-
-  if (discardPending && (mineDiscarded || state.stage !== "discard")) {
-    discardPending = false;
-    pendingDiscardIds = [];
-    selectedForDiscard.clear();
-  }
-
-  // If not pending and still in discard, make sure we aren't holding stale selection from previous hand
-  if (!discardPending && state.stage !== "discard" && selectedForDiscard.size) {
-    selectedForDiscard.clear();
-    pendingDiscardIds = [];
-  }
-}
-
 function render() {
   if (!state) return;
 
-  syncDiscardPendingFromState();
-
+  // Top chips
   tableLine.textContent = `Table: ${state.tableId}`;
-  meLine.textContent = `You: ${state.names?.[state.me] || state.me}`;
+  meLine.textContent = `You: ${myName()}`;
 
-  const p1 = state.players.PLAYER1 ? state.players.PLAYER1 : "—";
-  const p2 = state.players.PLAYER2 ? state.players.PLAYER2 : "—";
+  // Crew panel
+  const p1 = state.names?.PLAYER1 || state.players?.PLAYER1 || "—";
+  const p2 = state.names?.PLAYER2 || state.players?.PLAYER2 || "—";
   playersLine.textContent = `Players: ${p1} vs ${p2}`;
 
   stageLine.textContent = `Stage: ${state.stage}`;
-  dealerLine.textContent = `Dealer: ${state.names?.[state.dealer] || state.dealer}`;
-  turnLine.textContent = `Turn: ${state.names?.[state.turn] || state.turn}`;
+  dealerLine.textContent = `Dealer: ${dealerName()}`;
+  turnLine.textContent = `Turn: ${turnName()}`;
 
-  const p1n = state.players.PLAYER1 || "P1";
-  const p2n = state.players.PLAYER2 || "P2";
-  scoreLine.textContent = `${p1n} ${state.scores.PLAYER1} • ${p2n} ${state.scores.PLAYER2}`;
+  // Score line uses names (not P1/P2)
+  const s1 = state.scores.PLAYER1 ?? 0;
+  const s2 = state.scores.PLAYER2 ?? 0;
+  scoreLine.textContent = `${(state.names?.PLAYER1 || "P1")} ${s1} • ${(state.names?.PLAYER2 || "P2")} ${s2}`;
 
-  const cribOwnerName = state.names?.[state.dealer] || state.dealer;
-  cribLine.textContent = `Crib (${cribOwnerName}) • Discards: ${p1n} ${state.discardsCount.PLAYER1}/2  ${p2n} ${state.discardsCount.PLAYER2}/2`;
+  // Crib info line
+  cribLine.textContent =
+    `Crib (${dealerName()}) • Discards: ${(state.names?.PLAYER1 || "P1")} ${state.discardsCount.PLAYER1}/2  ${(state.names?.PLAYER2 || "P2")} ${state.discardsCount.PLAYER2}/2`;
 
   initTicksOnce();
   renderBoard();
-  renderMatch();
   renderPileAndHud();
   renderShow();
-  renderGoAndLastAction();
 
+  // Buttons
   goBtn.style.display = "none";
   nextHandBtn.style.display = "none";
-  if (nextGameBtn) nextGameBtn.style.display = "none";
+  nextGameBtn.style.display = "none";
+  newMatchBtn.style.display = "inline-block";
 
+  newMatchBtn.onclick = () => socket.emit("new_match");
+
+  // Clear hand area
   handArea.innerHTML = "";
 
+  // GAME OVER banner/controls
   if (state.gameOver) {
+    const winnerId = state.gameWinner;
+    const winnerName = state.names?.[winnerId] || winnerId;
     handTitle.textContent = "Game Over";
-    handHelp.textContent = "Winner announced. Start Next Game or New Match.";
-    if (nextGameBtn) {
+    handHelp.textContent = `🏁 ${winnerName} wins!`;
+
+    // If match over: only New Match makes sense
+    if (!state.matchOver) {
       nextGameBtn.style.display = "inline-block";
       nextGameBtn.onclick = () => socket.emit("next_game");
     }
+    // Disable other actions
+    showPanel.classList.add("hidden");
     return;
   }
 
+  // STAGES
   if (state.stage === "lobby") {
     handTitle.textContent = "Waiting…";
-    handHelp.textContent = "Join a table to start. (Use the same code on another device for 2-player.)";
+    handHelp.textContent = state.aiEnabled
+      ? "AI mode: starting shortly…"
+      : `Open the same table code on another device to play 2-player.`;
     showPanel.classList.add("hidden");
     return;
   }
@@ -362,38 +332,27 @@ function render() {
   if (state.stage === "discard") {
     showPanel.classList.add("hidden");
     handTitle.textContent = "Discard";
-
-    const cribOwner = state.names?.[state.dealer] || "dealer";
-
-    if (discardPending) {
-      handHelp.textContent = `Sending 2 cards to ${cribOwner}’s crib…`;
-    } else {
-      handHelp.textContent = `Select 2 cards to send to ${cribOwner}’s crib.`;
-    }
+    handHelp.textContent = `Select 2 cards to send to ${dealerName()}'s crib (auto-sends when you pick 2).`;
 
     const myHand = state.myHand || [];
 
-    const selectedIds = discardPending ? new Set(pendingDiscardIds) : selectedForDiscard;
-
     myHand.forEach(card => {
-      const selected = selectedIds.has(card.id);
+      const selected = selectedForDiscard.has(card.id);
       const btn = makeCardButton(card, {
         selected,
-        disabled: discardPending, // prevent extra clicks while we wait
         onClick: () => {
-          if (discardPending) return;
-
-          if (selectedForDiscard.has(card.id)) selectedForDiscard.delete(card.id);
-          else {
+          // toggle selection
+          if (selected) {
+            selectedForDiscard.delete(card.id);
+          } else {
             if (selectedForDiscard.size >= 2) return;
             selectedForDiscard.add(card.id);
           }
 
-          // When two selected, send ONCE and hold highlights until server confirms
+          // auto-send as soon as 2 chosen
           if (selectedForDiscard.size === 2) {
-            pendingDiscardIds = Array.from(selectedForDiscard);
-            discardPending = true;
-            socket.emit("discard_to_crib", { cardIds: pendingDiscardIds });
+            socket.emit("discard_to_crib", { cardIds: Array.from(selectedForDiscard) });
+            selectedForDiscard.clear();
           }
 
           render();
@@ -423,6 +382,7 @@ function render() {
       handArea.appendChild(btn);
     });
 
+    // GO only when it can work: your turn, you have cards, and none playable
     const canPlay = myHand.some(c => count + cardValue(c.rank) <= 31);
     if (myTurn && myHand.length > 0 && !canPlay) {
       goBtn.style.display = "inline-block";
@@ -434,12 +394,15 @@ function render() {
   if (state.stage === "show") {
     handTitle.textContent = "Show";
     handHelp.textContent = "Review scoring. Click Next Hand when ready.";
+
     nextHandBtn.style.display = "inline-block";
     nextHandBtn.onclick = () => socket.emit("next_hand");
 
+    // Show your hand (read-only) in the handArea too
     const myHand = state.myHand || [];
     myHand.forEach(card => handArea.appendChild(makeCardButton(card, { disabled: true })));
     if (state.cut) handArea.appendChild(makeCardButton(state.cut, { disabled: true }));
+
     return;
   }
 }
@@ -448,13 +411,16 @@ function render() {
 function doJoin() {
   const name = (nameInput.value || "").trim().slice(0, 16);
   const tableId = (tableInput.value || "").trim().slice(0, 24) || "JIM1";
-  const vsAI = !!(vsAiCheck && vsAiCheck.checked);
+  const vsAI = !!vsAICheck?.checked;
 
   if (!name) { alert("Enter a name."); return; }
+
   socket.emit("join_table", { tableId, name, vsAI });
+  joined = true;
   joinOverlay.style.display = "none";
 }
 
+// Pre-fill from URL
 (function initJoinDefaults(){
   const qs = new URLSearchParams(location.search);
   const table = (qs.get("table") || "JIM1").toString().trim().slice(0, 24);
@@ -466,9 +432,6 @@ function doJoin() {
 nameJoinBtn.onclick = doJoin;
 nameInput.addEventListener("keydown", (e)=>{ if (e.key === "Enter") doJoin(); });
 tableInput.addEventListener("keydown", (e)=>{ if (e.key === "Enter") doJoin(); });
-
-if (newMatchBtn) newMatchBtn.onclick = () => socket.emit("new_match");
-if (nextGameBtn) nextGameBtn.onclick = () => socket.emit("next_game");
 
 socket.on("state", (s) => {
   state = s;

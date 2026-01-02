@@ -1,6 +1,9 @@
 const socket = io();
 const el = (id) => document.getElementById(id);
 
+// Put the app in "locked" mode until player joins
+document.body.classList.add("modal-open");
+
 // Top chips
 const tableLine = el("tableLine");
 const meLine = el("meLine");
@@ -155,7 +158,6 @@ function renderMatch() {
   makePips(p1Wins, w1);
   makePips(p2Wins, w2);
 
-  // Buttons: only show Next Game if gameOver and match not over
   if (state.gameOver && !state.matchOver) {
     nextGameBtn.style.display = "inline-block";
     nextGameBtn.onclick = () => socket.emit("next_game");
@@ -283,7 +285,6 @@ function render() {
 
   scoreLine.textContent = `P1 ${state.scores.PLAYER1} • P2 ${state.scores.PLAYER2}`;
 
-  // Crib owner is dealer (by rules)
   cribLine.textContent =
     `Crib (${dealerName}) • Discards: P1 ${state.discardsCount.PLAYER1}/2  P2 ${state.discardsCount.PLAYER2}/2`;
 
@@ -293,7 +294,6 @@ function render() {
   renderPileAndHud();
   renderShow();
 
-  // reset buttons
   discardBtn.style.display = "none";
   goBtn.style.display = "none";
   nextHandBtn.style.display = "none";
@@ -301,7 +301,6 @@ function render() {
 
   handArea.innerHTML = "";
 
-  // Game/match end messages
   if (state.matchOver) {
     const winnerName = state.players[state.matchWinner] || state.matchWinner;
     handTitle.textContent = "Match Over";
@@ -315,7 +314,6 @@ function render() {
     return;
   }
 
-  // STAGES
   if (state.stage === "lobby") {
     handTitle.textContent = "Waiting for crew…";
     handHelp.textContent = state.ai?.enabled
@@ -377,7 +375,6 @@ function render() {
       handArea.appendChild(btn);
     });
 
-    // GO only when it can actually work: your turn, you have cards, and none playable
     const canPlay = myHand.some(c => count + cardValue(c.rank) <= 31);
     if (myTurn && myHand.length > 0 && !canPlay) {
       goBtn.style.display = "inline-block";
@@ -392,7 +389,6 @@ function render() {
       ? "This game ended at 121. Click Next Game to continue the match."
       : "Review scoring. Click Next Hand when ready.";
 
-    // Only show Next Hand when game isn't over
     if (!state.gameOver) {
       nextHandBtn.style.display = "inline-block";
       nextHandBtn.onclick = () => socket.emit("next_hand");
@@ -415,6 +411,10 @@ function doJoin() {
 
   socket.emit("join_table", { tableId, name, ai });
   joined = true;
+
+  // ✅ unlock the UI behind the overlay
+  document.body.classList.remove("modal-open");
+
   joinOverlay.style.display = "none";
 }
 

@@ -5,12 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>🏴‍☠️ Pirate Cribbage</title>
   <link rel="stylesheet" href="/css/styles.css">
-
-  <!-- Hard overrides to remove any silhouette art on the join screen -->
-  <style>
-    .overlayCard { background-image: none !important; }
-    .overlayCard::before, .overlayCard::after { content: none !important; display: none !important; }
-  </style>
 </head>
 
 <body>
@@ -30,16 +24,12 @@
         <input id="tableInput" class="nameInput" maxlength="24" placeholder="JIM1" />
       </div>
 
-      <label class="overlayRow" style="margin-top:10px;">
-        <div class="overlayLabel">Opponent</div>
-        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-          <label style="display:flex; gap:8px; align-items:center;">
-            <input id="aiToggle" type="checkbox" />
-            <span style="font-weight:800;">Play vs AI</span>
-          </label>
-          <span style="font-size:12px; opacity:0.85;">(Leave unchecked for 2-player.)</span>
-        </div>
-      </label>
+      <div class="overlayRow" style="margin-top:10px;">
+        <label style="display:flex; gap:10px; align-items:center; color: var(--muted); font-size: 13px;">
+          <input id="aiToggle" type="checkbox" />
+          Play vs AI <span style="opacity:.8;">(leave unchecked for 2-player)</span>
+        </label>
+      </div>
 
       <button id="nameJoinBtn" class="btn primary big">Set Sail</button>
       <div class="overlayHint">Tip: use the same table code on another device for 2-player.</div>
@@ -105,28 +95,7 @@
           <div id="scoreLine" class="scoreText">—</div>
         </div>
 
-        <div class="matchBlock">
-          <div class="scoreTitle">Match Wins (first to 3)</div>
-          <div id="matchLine" class="mutedSmall">—</div>
-          <div style="height:8px;"></div>
-          <div style="display:flex; gap:10px; flex-wrap:wrap;">
-            <div>
-              <div class="mutedSmall" id="p1Name">P1</div>
-              <div class="pips" id="p1Wins"></div>
-            </div>
-            <div>
-              <div class="mutedSmall" id="p2Name">P2</div>
-              <div class="pips" id="p2Wins"></div>
-            </div>
-          </div>
-        </div>
-
         <div class="mutedSmall" id="cribLine">Crib: —</div>
-
-        <div class="crewButtons" style="margin-top:12px; display:flex; gap:10px; flex-wrap:wrap;">
-          <button id="newMatchBtn" class="btn ghost">New Match</button>
-          <button id="nextGameBtn" class="btn primary">Next Game</button>
-        </div>
       </aside>
 
       <!-- RIGHT: PLAY -->

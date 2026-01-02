@@ -11,6 +11,30 @@
   <!-- TOAST (non-sticky GO notifications) -->
   <div id="toast" class="toast"></div>
 
+  <!-- GO MODAL (sticky / must acknowledge) -->
+  <div id="goOverlay" class="overlay hidden">
+    <div class="panel overlayCard">
+      <h2 class="overlayTitle" id="goTitle">GO!</h2>
+      <p class="overlayText" id="goText">Opponent said GO.</p>
+      <button id="goOkBtn" class="btn primary big">OK</button>
+    </div>
+  </div>
+
+  <!-- END-OF-GAME / MATCH MODAL -->
+  <div id="endOverlay" class="overlay hidden">
+    <div class="panel overlayCard">
+      <h2 class="overlayTitle" id="endTitle">Game Over</h2>
+      <p class="overlayText" id="endText">—</p>
+
+      <div style="display:flex; gap:10px; flex-wrap:wrap;">
+        <button id="endContinueBtn" class="btn primary big">Continue</button>
+        <button id="endNewMatchBtn" class="btn primary big" style="display:none;">New Match</button>
+      </div>
+
+      <div class="overlayHint" id="endHint" style="margin-top:12px;">Ready when you are.</div>
+    </div>
+  </div>
+
   <!-- JOIN OVERLAY -->
   <div id="joinOverlay" class="overlay">
     <div class="panel overlayCard">

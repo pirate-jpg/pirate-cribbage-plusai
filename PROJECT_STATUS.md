@@ -1,30 +1,34 @@
-# Pirate Cribbage PlusAI — Project Status
+## Pirate Cribbage PlusAI — Project Status
 
-## Current State (as of this update)
-- **Human vs Human mode:** Still supported (join same table on 2 devices).
-- **Play vs AI mode:** Implemented and working server-side.
-  - AI occupies **PLAYER2** as **“AI Captain”**
-  - Table locks to AI mode to prevent accidental second human join
+Last updated: 2026-01-01
 
-## Changes Included
-- `server.js`
-  - Added `vsAI` support to `join_table`
-  - Added AI discard + pegging (play/go) engine with small think delay
-  - AI tables auto-start after human joins (no waiting for PLAYER2 socket)
-  - AI tables reject second human join attempts
-- `public/index.html`
-  - Removed “Peggy” mention
-  - Added AI checkbox id **aiToggle** matching app.js
+## Current state
+This repo is a cloned “PlusAI” version of Pirate Cribbage. Human-vs-human remains available, and an optional “Play vs AI” mode is supported.
 
-## Known Limitations (intentional for now)
-- AI strategy is **simple** (lowest playable / lowest discard). Next improvement: smarter crib + pegging tactics.
-- AI does not “chat” — only acts through game flow.
+### Working features
+- Join overlay with player name + table code
+- Optional “Play vs AI” checkbox
+- Full game flow: discard → pegging → show → next hand
+- Pegging scoring: 15 / 31, pairs, runs, last card
+- Show scoring with detailed breakdown: 15s / pairs / runs / flush / nobs
+- Game target: 121
+- Match tracking: first to 3 wins (New Match / Next Game)
 
-## Next Requested UI Tweaks (not done yet)
-- Make “GO” announcements more obvious (“Opponent says GO!”)
-- Show crib-owner instruction earlier: “Discard 2 to Jim’s crib”
-- Use **names** instead of “P1/P2” in the score line
+## Fixes included in this update
+- AI no longer stalls: server actively drives AI actions in discard + pegging, and after Next Hand/Next Game.
+- GO is now obvious: “Opponent says GO!” is displayed prominently.
+- Discard is auto-send: selecting exactly 2 cards immediately sends them to the crib (no dead button).
+- Crew score uses player names (not P1/P2).
+- Crib owner text uses the dealer’s name everywhere (“Crib (Jim)”).
+- Winner announced and gameplay locked when score reaches 121 (no dealing past 121).
+- Layout stabilized to a consistent two-column design (board+crew left, play+show right).
+- Removed “Peggy” references and removed any “Pirate Jim silhouette” references from UI copy.
 
-## Repo(s)
-- Original: `pirate-cribbage` (leave as stable baseline)
-- AI branch/project: `pirate-cribbage-plusai`
+## Known limitations (next work)
+- AI strategy is currently “basic/greedy” for pegging and simple for discard.
+- AI does not yet play “show” optimally (show scoring is accurate; AI decision-making is not tuned).
+
+## Next recommended steps
+1. Improve AI discard heuristics (crib-aware strategy when dealer vs non-dealer).
+2. Improve AI pegging strategy (look-ahead, avoid setting up opponent runs).
+3. Add a difficulty selector (Easy / Normal / Hard).

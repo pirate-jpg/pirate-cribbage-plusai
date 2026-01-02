@@ -46,25 +46,19 @@ body{
 }
 
 /* Layout */
-.page{
-  padding:18px;
-  max-width: 1500px;
-  margin: 0 auto;
-}
+.page{ padding:18px; }
 
-/*
-  Consistent layout:
-  Left column: Board + Crew (stacked)
-  Right column: Play
-*/
+/* LOCKED 2-column layout (stable) */
 .grid{
   display:grid;
-  grid-template-columns: 420px minmax(520px, 1fr);
+  grid-template-columns: 460px minmax(520px, 1fr);
   grid-template-areas:
     "board play"
     "crew  play";
   gap:18px;
   align-items:start;
+  max-width: 1400px;
+  margin: 0 auto;
 }
 
 .boardPanel{ grid-area: board; }
@@ -78,6 +72,7 @@ body{
       "board"
       "crew"
       "play";
+    max-width: 900px;
   }
 }
 
@@ -88,11 +83,10 @@ body{
   box-shadow: var(--shadow);
   padding:16px;
 }
-
 .panelHeader{ display:flex; flex-direction:column; gap:4px; margin-bottom:12px; }
 .panelHeader h2{ margin:0; font-size:18px; }
 .mutedSmall{ color:var(--muted); font-size:12px; }
-.mutedInline{ color:var(--muted); font-size:12px; margin-left:6px; }
+
 .spread{ flex-direction:row; align-items:center; justify-content:space-between; }
 
 .miniRow{ display:flex; gap:8px; flex-wrap:wrap; margin:10px 0 14px; }
@@ -105,7 +99,7 @@ body{
   font-size:12px;
 }
 
-.scoreBlock, .matchBlock{
+.scoreBlock{
   margin-top:12px;
   padding:12px;
   border-radius:14px;
@@ -113,28 +107,9 @@ body{
   background:#00000018;
 }
 .scoreTitle{ font-size:12px; color:var(--muted); margin-bottom:6px; }
-.scoreText{ font-size:16px; font-weight:900; }
+.scoreText{ font-size:16px; font-weight:800; }
 
-.matchLine{ color: var(--muted); font-size: 12px; margin-bottom: 10px; }
-
-.matchGrid{
-  display:grid;
-  grid-template-columns: 1fr auto 1fr;
-  align-items:center;
-  gap:10px;
-}
-.matchName{ font-weight:900; }
-.vs{ opacity:0.85; font-size:18px; }
-.pips{ display:flex; gap:6px; margin-top:8px; flex-wrap:wrap; }
-.pip{
-  width:14px; height:14px;
-  border-radius:50%;
-  border:1px solid var(--line);
-  background:#00000033;
-}
-.pip.on{ background: var(--gold); border-color: #00000055; }
-
-.crewButtons{ margin-top:12px; display:flex; gap:10px; }
+.crewButtons{ margin-top:12px; display:flex; gap:10px; flex-wrap:wrap; }
 
 /* Board */
 .woodFrame{
@@ -201,11 +176,12 @@ body{
 .dot2{ background:#ff4aa8; }
 
 /* Gameplay panel */
+.playPanel{ display:flex; flex-direction:column; gap:14px; }
+
 .hudRow{
   display:grid;
   grid-template-columns: 180px 1fr;
   gap:14px;
-  margin-bottom:12px;
 }
 @media (max-width: 700px){
   .hudRow{ grid-template-columns: 1fr; }
@@ -235,17 +211,7 @@ body{
   padding:14px;
 }
 .statusTitle{ font-size:12px; color:var(--muted); margin-bottom:6px; }
-.statusText{ font-size:15px; font-weight:900; }
-
-.goCallout{
-  margin-top:10px;
-  padding:10px 12px;
-  border-radius:12px;
-  border:1px solid #ffffff22;
-  background: #00000030;
-  color: #ffe8b0;
-  font-weight:1000;
-}
+.statusText{ font-size:15px; font-weight:800; }
 
 .lastScore{
   margin-top:10px;
@@ -254,9 +220,8 @@ body{
   border:1px solid #ffffff22;
   background:#00000025;
   color:#ffe8b0;
-  font-weight:900;
+  font-weight:1000;
 }
-
 .hidden{ display:none !important; }
 
 .pileBlock{
@@ -264,7 +229,6 @@ body{
   border-radius:16px;
   padding:12px;
   background:#00000018;
-  margin-bottom:12px;
 }
 .pileTitle{ font-size:12px; color:var(--muted); margin-bottom:10px; }
 .pileArea{ display:flex; gap:10px; flex-wrap:wrap; }
@@ -284,7 +248,6 @@ body{
   background: linear-gradient(180deg, #2c5b63 0%, #163743 100%);
   border-color:#ffffff33;
 }
-.btn.ghost{ background:#00000010; }
 
 .btn.go{
   background: linear-gradient(180deg, #ff7a4d 0%, var(--danger) 100%);
@@ -301,11 +264,6 @@ body{
   padding:14px 18px;
   font-size:18px;
   border-radius:14px;
-}
-
-.disabledBtn{
-  opacity:0.5;
-  cursor:not-allowed;
 }
 
 /* Hand */
@@ -380,7 +338,7 @@ body{
 }
 
 /* Show panel */
-.showPanel{ margin-top:14px; }
+.showPanel{ }
 .showGrid{
   display:grid;
   grid-template-columns: repeat(3, 1fr);
@@ -394,7 +352,7 @@ body{
 .breakList{ margin:0; padding-left:18px; color:var(--muted); }
 .totalLine{ margin-top:10px; font-weight:1000; color:var(--gold); }
 
-/* Overlay Join + Winner */
+/* Overlay Join */
 .overlay{
   position:fixed;
   inset:0;
@@ -414,7 +372,6 @@ body{
 .overlayTitle{ margin:0 0 6px; font-size:22px; }
 .overlayText{ margin:0 0 14px; color:var(--muted); }
 .overlayRow{ display:flex; flex-direction:column; gap:6px; margin-bottom:10px; }
-.overlayActions{ flex-direction:row; gap:12px; flex-wrap:wrap; }
 .overlayLabel{ font-size:12px; color:var(--muted); }
 .nameInput{
   padding:12px 12px;
@@ -422,15 +379,15 @@ body{
   border:1px solid #ffffff2a;
   background:#00000022;
   color:var(--text);
-  font-weight:900;
+  font-weight:800;
 }
 .overlayHint{ margin-top:12px; color:#d5c8a6; font-size:12px; opacity:0.9; }
 
 .checkRow{
   display:flex;
-  gap:10px;
   align-items:center;
+  gap:10px;
+  margin:10px 0 14px;
   color: var(--text);
-  font-weight:800;
 }
-.checkRow input{ transform: scale(1.2); }
+.checkRow input{ transform: scale(1.1); }

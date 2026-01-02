@@ -398,9 +398,19 @@ body{
   transition: opacity 160ms ease, transform 160ms ease;
   z-index: 9999;
   box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+}/* overlays can be hidden */
+.overlay.hidden{
+  display:none !important;
 }
+
+/* Make GO + END modals feel more "center stage" */
+#goOverlay .overlayCard,
+#endOverlay .overlayCard{
+  max-width: 520px;
+}
+
 .toast.show{
   opacity: 1;
   transform: translateX(-50%) translateY(0);
-}
+  }
 .overlayHint{ margin-top:12px; color:#d5c8a6; font-size:12px; opacity:0.9; }

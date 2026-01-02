@@ -1,37 +1,37 @@
 # Pirate Cribbage Plus AI — Project Status
 
-## Current (Baseline)
-- 2-player cribbage is working end-to-end:
-  - Join table
-  - Deal 6, discard 2 to crib
-  - Pegging (15/31/pairs/runs/last card) with running count UI
-  - Show scoring with breakdown (15s/pairs/runs/flush/nobs)
-  - Game ends at 121
-  - Match score tracking (multi-game)
-- UI: pirate theme, improved readability, cards visible/colored, Captain’s Log removed.
+## Repo
+- pirate-cribbage-plusai
 
-## Goal (This branch)
-Add Solo vs AI mode while preserving baseline behavior.
+## Current Features (Working)
+- Two-player cribbage (real-time Socket.IO)
+- Join overlay for player names + table code
+- Deal 6, discard 2 to crib
+- Pegging:
+  - 15 / 31
+  - pairs / triples / quads
+  - run scoring
+  - last card
+  - GO logic
+  - no-stall fix when opponent is out of cards and remaining player is blocked
+- Show scoring with breakdown:
+  - 15s / pairs / runs / flush / nobs
+- Game ends at 121
+- Match wins tracked (first to 3)
+- Next hand / next game / new match supported (server)
 
-## Plan (Next Changes)
-1. Add `ai=1` join option (URL param and/or join overlay toggle).
-2. Server creates BOT as PLAYER2 when AI mode requested and seat is open.
-3. BOT logic:
-   - Discard decision via Monte Carlo evaluation.
-   - Pegging decision using immediate scoring + defensive heuristics.
-   - Auto-GO when no playable cards.
-4. Ensure BOT respects game flow:
-   - Doesn’t stall
-   - Doesn’t play out of turn
-   - Handles end-of-hand, show, next-hand, next-game
-5. UI: show bot name and “Crib (PLAYERX)” label.
+## New in this update
+- Solo vs AI mode:
+  - Join overlay checkbox “Solo vs AI”
+  - URL param `?ai=1` auto-enables the checkbox
+  - Bot joins as PLAYER2 (“Blackbeard (AI)”) without a second device
+  - Bot auto-discards to crib and plays pegging + GO
 
-## Known Risks
-- Infinite loop if bot “acts” inside state emit; must schedule bot moves with a short server-side timer and re-check state each time.
-- Ensure AI only acts when both sides are “ready” (e.g., after human discard).
+## Known limitations (intentional for safety)
+- Human still clicks “Next Hand” (and match/game control flow stays human-driven)
 
-## Definition of Done
-- Can play solo from `/?table=JIM1&name=Jim&ai=1`
-- Game completes to 121 and match completes to target wins
-- No stalls during pegging / GO edge cases
-- Works in Chrome + Chromebook
+## Next possible upgrades
+- Make bot smarter at discard (crib expectation modeling)
+- Add “Next Game” + match UI buttons in the client (already supported server-side)
+- Make bot auto-advance hands/games optionally (toggle)
+- Add difficulty levels (easy/normal/hard)

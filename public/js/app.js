@@ -13,6 +13,15 @@ const turnLine = el("turnLine");
 const scoreLine = el("scoreLine");
 const cribLine = el("cribLine");
 
+// Match UI
+const matchLine = el("matchLine");
+const p1Name = el("p1Name");
+const p2Name = el("p2Name");
+const p1Wins = el("p1Wins");
+const p2Wins = el("p2Wins");
+const nextGameBtn = el("nextGameBtn");
+const newMatchBtn = el("newMatchBtn");
+
 // Play panel
 const handTitle = el("handTitle");
 const handHelp = el("handHelp");
@@ -54,8 +63,8 @@ const cTotal = el("cTotal");
 const joinOverlay = el("joinOverlay");
 const nameInput = el("nameInput");
 const tableInput = el("tableInput");
-const aiToggle = el("aiToggle");
 const nameJoinBtn = el("nameJoinBtn");
+const aiToggle = el("aiToggle");
 
 let state = null;
 let joined = false;
@@ -123,6 +132,40 @@ function renderBoard() {
   setPegPosition(p2Peg, state.scores.PLAYER2);
 }
 
+function renderMatch() {
+  if (!state) return;
+  const w1 = state.matchWins?.PLAYER1 ?? 0;
+  const w2 = state.matchWins?.PLAYER2 ?? 0;
+  const target = state.matchTarget ?? 3;
+
+  p1Name.textContent = state.players.PLAYER1 || "P1";
+  p2Name.textContent = state.players.PLAYER2 || "P2";
+
+  matchLine.textContent = `${w1} – ${w2} (first to ${target})`;
+
+  const makePips = (root, n) => {
+    root.innerHTML = "";
+    for (let i = 0; i < target; i++) {
+      const d = document.createElement("span");
+      d.className = "pip" + (i < n ? " on" : "");
+      root.appendChild(d);
+    }
+  };
+
+  makePips(p1Wins, w1);
+  makePips(p2Wins, w2);
+
+  // Buttons: only show Next Game if gameOver and match not over
+  if (state.gameOver && !state.matchOver) {
+    nextGameBtn.style.display = "inline-block";
+    nextGameBtn.onclick = () => socket.emit("next_game");
+  } else {
+    nextGameBtn.style.display = "none";
+  }
+
+  newMatchBtn.onclick = () => socket.emit("new_match");
+}
+
 function renderPileAndHud() {
   if (!state) return;
 
@@ -142,11 +185,11 @@ function renderPileAndHud() {
   }
 
   const myTurn = state.turn === state.me;
-  const myCards = state.myHandCount ?? 0;
-  const oppCards = state.oppHandCount ?? 0;
+  const mine = state.myHandCount ?? 0;
+  const opp = state.oppHandCount ?? 0;
 
   peggingStatus.textContent =
-    `${myTurn ? "Your turn" : "Opponent’s turn"} • You: ${myCards} card(s) • Opponent: ${oppCards} card(s)`;
+    `${myTurn ? "Your turn" : "Opponent’s turn"} • You: ${mine} card(s) • Opponent: ${opp} card(s)`;
 
   const ev = state.lastPegEvent;
   if (ev && ev.pts && ev.pts > 0) {
@@ -187,9 +230,12 @@ function renderShow() {
   const nonDealer = state.show.nonDealer;
   const dealer = state.show.dealer;
 
-  ndTitle.textContent = `Non-dealer (${nonDealer})`;
-  dTitle.textContent = `Dealer (${dealer})`;
-  cTitle.textContent = `Crib (${dealer})`;
+  const ndName = state.players[nonDealer] || nonDealer;
+  const dName = state.players[dealer] || dealer;
+
+  ndTitle.textContent = `Non-dealer (${ndName})`;
+  dTitle.textContent = `Dealer (${dName})`;
+  cTitle.textContent = `Crib (${dName})`;
 
   ndCards.innerHTML = "";
   dCards.innerHTML = "";
@@ -228,15 +274,22 @@ function render() {
   playersLine.textContent = `Players: ${p1} vs ${p2}`;
 
   stageLine.textContent = `Stage: ${state.stage}`;
-  dealerLine.textContent = `Dealer: ${state.dealer}`;
-  turnLine.textContent = `Turn: ${state.turn}`;
+
+  const dealerName = state.players[state.dealer] || state.dealer;
+  dealerLine.textContent = `Dealer: ${dealerName}`;
+
+  const turnName = state.players[state.turn] || state.turn;
+  turnLine.textContent = `Turn: ${turnName}`;
+
   scoreLine.textContent = `P1 ${state.scores.PLAYER1} • P2 ${state.scores.PLAYER2}`;
 
+  // Crib owner is dealer (by rules)
   cribLine.textContent =
-    `Crib (${state.dealer}) • Discards: P1 ${state.discardsCount.PLAYER1}/2  P2 ${state.discardsCount.PLAYER2}/2`;
+    `Crib (${dealerName}) • Discards: P1 ${state.discardsCount.PLAYER1}/2  P2 ${state.discardsCount.PLAYER2}/2`;
 
   initTicksOnce();
   renderBoard();
+  renderMatch();
   renderPileAndHud();
   renderShow();
 
@@ -248,11 +301,26 @@ function render() {
 
   handArea.innerHTML = "";
 
+  // Game/match end messages
+  if (state.matchOver) {
+    const winnerName = state.players[state.matchWinner] || state.matchWinner;
+    handTitle.textContent = "Match Over";
+    handHelp.textContent = `${winnerName} wins the match. Start a new match to play again.`;
+    return;
+  }
+  if (state.gameOver && state.stage !== "show") {
+    const winnerName = state.players[state.gameWinner] || state.gameWinner;
+    handTitle.textContent = "Game Over";
+    handHelp.textContent = `${winnerName} won this game. Click Next Game to continue the match.`;
+    return;
+  }
+
+  // STAGES
   if (state.stage === "lobby") {
     handTitle.textContent = "Waiting for crew…";
-    handHelp.textContent = state.botEnabled
-      ? "Solo vs AI: you’re sailing against Blackbeard."
-      : `Open the same table on Peggy’s phone: "${state.tableId}".`;
+    handHelp.textContent = state.ai?.enabled
+      ? "AI is aboard. Dealing begins as soon as you join."
+      : `Open the same table on another device: "${state.tableId}".`;
     showPanel.classList.add("hidden");
     return;
   }
@@ -309,6 +377,7 @@ function render() {
       handArea.appendChild(btn);
     });
 
+    // GO only when it can actually work: your turn, you have cards, and none playable
     const canPlay = myHand.some(c => count + cardValue(c.rank) <= 31);
     if (myTurn && myHand.length > 0 && !canPlay) {
       goBtn.style.display = "inline-block";
@@ -320,11 +389,11 @@ function render() {
   if (state.stage === "show") {
     handTitle.textContent = "Show";
     handHelp.textContent = state.gameOver
-      ? "Game over. Start the next game from your match controls (if enabled)."
+      ? "This game ended at 121. Click Next Game to continue the match."
       : "Review scoring. Click Next Hand when ready.";
 
-    // keep Next Hand for now (safe for both 2P and AI)
-    if (!state.gameOver && !state.matchOver) {
+    // Only show Next Hand when game isn't over
+    if (!state.gameOver) {
       nextHandBtn.style.display = "inline-block";
       nextHandBtn.onclick = () => socket.emit("next_hand");
     }
@@ -340,7 +409,7 @@ function render() {
 function doJoin() {
   const name = (nameInput.value || "").trim().slice(0, 16);
   const tableId = (tableInput.value || "").trim().slice(0, 24) || "JIM1";
-  const ai = !!(aiToggle && aiToggle.checked);
+  const ai = !!aiToggle?.checked;
 
   if (!name) { alert("Enter a name."); return; }
 
@@ -354,14 +423,11 @@ function doJoin() {
   const qs = new URLSearchParams(location.search);
   const table = (qs.get("table") || "JIM1").toString().trim().slice(0, 24);
   const name = (qs.get("name") || "").toString().trim().slice(0, 16);
-  const ai = (qs.get("ai") || "").toString().trim();
+  const ai = (qs.get("ai") === "1");
 
   tableInput.value = table;
   if (name) nameInput.value = name;
-
-  if (aiToggle) {
-    aiToggle.checked = (ai === "1" || ai.toLowerCase() === "true" || ai.toLowerCase() === "yes");
-  }
+  if (aiToggle) aiToggle.checked = ai;
 })();
 
 nameJoinBtn.onclick = doJoin;
@@ -369,7 +435,7 @@ nameInput.addEventListener("keydown", (e)=>{ if (e.key === "Enter") doJoin(); })
 tableInput.addEventListener("keydown", (e)=>{ if (e.key === "Enter") doJoin(); });
 
 socket.on("connect", () => {
-  // idle until Set Sail
+  // stay idle until player presses Set Sail
 });
 
 socket.on("state", (s) => {

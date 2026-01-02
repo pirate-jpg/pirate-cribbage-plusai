@@ -6,6 +6,7 @@
 // - Fix: no-stall when opponent is out of cards and remaining player is blocked
 // - Game ends at 121 (no dealing past 121); match wins tracked (first to 3)
 // - Next game + new match
+// - PLUS AI MODE (Solo vs Bot): bot auto-discards + plays pegging + GO
 
 const path = require("path");
 const express = require("express");
@@ -75,6 +76,13 @@ function ensureTable(tableId) {
       players: { PLAYER1: null, PLAYER2: null },  // socket ids
       names:   { PLAYER1: "PLAYER1", PLAYER2: "PLAYER2" },
 
+      // AI/Bot (only ever fills PLAYER2 for now)
+      bot: {
+        enabled: false,
+        seat: "PLAYER2",
+        name: "Blackbeard (AI)"
+      },
+
       dealer: "PLAYER1",
       stage: "lobby", // lobby | discard | pegging | show
       turn: "PLAYER1",
@@ -131,6 +139,11 @@ function canPlayAny(hand, count) {
 function publicStateFor(t, me) {
   const handForUI = (t.stage === "pegging") ? (t.pegHands[me] || []) : (t.hands[me] || []);
 
+  const p1Name = t.players.PLAYER1 ? t.names.PLAYER1 : null;
+  const p2Name = t.players.PLAYER2
+    ? t.names.PLAYER2
+    : (t.bot.enabled ? t.bot.name : null);
+
   return {
     tableId: t.id,
     stage: t.stage,
@@ -151,9 +164,12 @@ function publicStateFor(t, me) {
 
     names: t.names,
 
+    botEnabled: t.bot.enabled,
+    botName: t.bot.name,
+
     players: {
-      PLAYER1: t.players.PLAYER1 ? t.names.PLAYER1 : null,
-      PLAYER2: t.players.PLAYER2 ? t.names.PLAYER2 : null
+      PLAYER1: p1Name,
+      PLAYER2: p2Name
     },
 
     cribCount: t.crib.length,
@@ -222,14 +238,15 @@ function resetForNewGame(t) {
   t.show = null;
   t.lastPegEvent = null;
 
-  // Alternate starting dealer for the new game for fairness
+  // Alternate starting dealer for fairness
   t.dealer = otherPlayer(t.dealer);
   t.stage = "lobby";
   t.turn = t.dealer;
 
   pushLog(t, `⚓ New game begins. Starting dealer: ${t.dealer} (${t.names[t.dealer]}).`);
 
-  if (t.players.PLAYER1 && t.players.PLAYER2 && !t.matchOver) {
+  const ready = t.players.PLAYER1 && (t.players.PLAYER2 || t.bot.enabled);
+  if (ready && !t.matchOver) {
     startHand(t);
   }
 }
@@ -239,7 +256,6 @@ function resetForNewMatch(t) {
   t.matchOver = false;
   t.matchWinner = null;
 
-  // New match also resets game:
   t.scores = { PLAYER1: 0, PLAYER2: 0 };
   t.gameOver = false;
   t.gameWinner = null;
@@ -253,7 +269,8 @@ function resetForNewMatch(t) {
 
   pushLog(t, `🧭 New match started (first to ${t.matchTarget} wins).`);
 
-  if (t.players.PLAYER1 && t.players.PLAYER2) {
+  const ready = t.players.PLAYER1 && (t.players.PLAYER2 || t.bot.enabled);
+  if (ready) {
     startHand(t);
   }
 }
@@ -277,13 +294,11 @@ function startHand(t) {
   const p1 = t.deck.splice(0, 6);
   const p2 = t.deck.splice(0, 6);
 
-  // during discard, hands/pegHands mirror (6 cards)
   t.hands.PLAYER1 = [...p1];
   t.hands.PLAYER2 = [...p2];
   t.pegHands.PLAYER1 = [...p1];
   t.pegHands.PLAYER2 = [...p2];
 
-  // dealer stays as set; discard phase doesn't use turn
   t.turn = t.dealer;
 
   pushLog(t, `New hand. Dealer: ${t.dealer} (${t.names[t.dealer]}).`);
@@ -296,11 +311,9 @@ function enterPegging(t) {
 
   pushLog(t, `Cut: ${t.cut.rank}${t.cut.suit}`);
 
-  // pegHands = copy of show hands (now 4 cards each)
   t.pegHands.PLAYER1 = [...t.hands.PLAYER1];
   t.pegHands.PLAYER2 = [...t.hands.PLAYER2];
 
-  // non-dealer starts pegging
   t.turn = otherPlayer(t.dealer);
   t.peg = { count: 0, pile: [], lastPlayer: null, go: { PLAYER1: false, PLAYER2: false } };
 
@@ -332,7 +345,6 @@ function pegPointsAfterPlay(t, player, playedCard) {
   if (t.peg.count === 15) { pts += 2; reasons.push("15 for 2"); }
   if (t.peg.count === 31) { pts += 2; reasons.push("31 for 2"); }
 
-  // pairs/three/four in a row (last N same ranks)
   let same = 1;
   for (let i = t.peg.pile.length - 2; i >= 0; i--) {
     if (t.peg.pile[i].rank === playedCard.rank) same++;
@@ -342,7 +354,6 @@ function pegPointsAfterPlay(t, player, playedCard) {
   else if (same === 3) { pts += 6; reasons.push("three of a kind for 6"); }
   else if (same === 4) { pts += 12; reasons.push("four of a kind for 12"); }
 
-  // runs
   const runPts = peggingRunPoints(t.peg.pile);
   if (runPts >= 3) { pts += runPts; reasons.push(`run of ${runPts} for ${runPts}`); }
 
@@ -374,12 +385,10 @@ function resetPegCount(t) {
   pushLog(t, `Count resets to 0.`);
 }
 
-// End sequence, reset count, continue with next lead; also advances to show if pegging done
 function endSequenceAndContinue(t, nextTurnPlayer) {
   awardLastCardIfNeeded(t);
   resetPegCount(t);
 
-  // If pegging ended, show will be handled by caller (or below)
   if (t.pegHands.PLAYER1.length === 0 && t.pegHands.PLAYER2.length === 0) {
     scoreShowAndAdvance(t);
     return;
@@ -529,17 +538,277 @@ function scoreShowAndAdvance(t) {
 }
 
 /** -------------------------
+ * BOT (AI) helpers
+ * ------------------------- */
+
+function botSeat(t) { return t.bot.seat; }
+function botIsReady(t) { return t.bot.enabled; }
+
+function scheduleBot(tableId, delayMs = 300) {
+  setTimeout(() => {
+    const t = tables[tableId];
+    if (!t || !t.bot.enabled) return;
+    try { botAct(t); } catch (e) { console.error("botAct error:", e); }
+    emitState(tableId);
+  }, delayMs);
+}
+
+function botAct(t) {
+  if (!t.bot.enabled) return;
+  if (t.gameOver || t.matchOver) return;
+
+  const botP = botSeat(t);
+
+  // DISCARD: if bot hasn't discarded yet, do so
+  if (t.stage === "discard") {
+    if (t.discards[botP].length !== 2) {
+      botDiscardToCrib(t);
+      // If that completes both discards, pegging begins automatically
+    }
+    return;
+  }
+
+  // PEGGING: if it's bot's turn, play or go
+  if (t.stage === "pegging" && t.turn === botP) {
+    const hand = t.pegHands[botP] || [];
+    const count = t.peg.count;
+
+    const playable = hand.filter(c => count + cardValue(c.rank) <= 31);
+    if (playable.length === 0) {
+      // Bot says GO (special case handled by normal go logic below)
+      botSayGo(t);
+      return;
+    }
+
+    const card = botChoosePeggingCard(t, playable);
+    botPlayCard(t, card.id);
+    return;
+  }
+}
+
+function botDiscardToCrib(t) {
+  const botP = botSeat(t);
+  const hand6 = t.hands[botP] || [];
+  if (hand6.length !== 6) return;
+
+  // Evaluate all discard pairs; keep best expected keep score (Monte Carlo-ish cuts)
+  let best = null; // { ids: [a,b], score }
+  const N = 200;
+
+  // Build a pool of possible cut cards (unknown deck minus the bot's 6).
+  // We ignore knowledge of opponent/crib; this is "good enough" bot for v1.
+  const full = newDeck();
+  const usedIds = new Set(hand6.map(c => c.id));
+  const pool = full.filter(c => !usedIds.has(c.id));
+
+  function randFromPool() {
+    return pool[Math.floor(Math.random() * pool.length)];
+  }
+
+  for (let i = 0; i < hand6.length; i++) {
+    for (let j = i + 1; j < hand6.length; j++) {
+      const discardA = hand6[i];
+      const discardB = hand6[j];
+      const keep = hand6.filter(c => c.id !== discardA.id && c.id !== discardB.id);
+
+      // average score across random cuts
+      let total = 0;
+      for (let k = 0; k < N; k++) {
+        const cut = randFromPool();
+        total += scoreHandBreakdown(keep, cut, false).total;
+      }
+      const avg = total / N;
+
+      // small bias: if bot is dealer, discarding "to own crib" slightly encouraged
+      const bias = (t.dealer === botP) ? 0.15 : -0.05;
+      const score = avg + bias;
+
+      if (!best || score > best.score) {
+        best = { ids: [discardA.id, discardB.id], score };
+      }
+    }
+  }
+
+  if (!best) return;
+
+  // Apply discard exactly like player discard_to_crib
+  const ids = best.ids;
+  const chosen = [];
+  for (const id of ids) {
+    const idx = t.hands[botP].findIndex(c => c.id === id);
+    if (idx === -1) return;
+    chosen.push(t.hands[botP][idx]);
+  }
+
+  t.hands[botP] = t.hands[botP].filter(c => !ids.includes(c.id));
+  t.pegHands[botP] = t.pegHands[botP].filter(c => !ids.includes(c.id));
+  t.discards[botP] = chosen;
+  t.crib.push(...chosen);
+
+  pushLog(t, `${botP} (BOT) discards 2 to crib.`);
+
+  const p1Done = t.discards.PLAYER1.length === 2;
+  const p2Done = t.discards.PLAYER2.length === 2;
+
+  if (p1Done && p2Done && t.crib.length === 4) enterPegging(t);
+}
+
+function evalImmediatePegPointsSim(pile, count, playedCard) {
+  let pts = 0;
+
+  if (count === 15) pts += 2;
+  if (count === 31) pts += 2;
+
+  // pairs (last N same ranks)
+  let same = 1;
+  for (let i = pile.length - 2; i >= 0; i--) {
+    if (pile[i].rank === playedCard.rank) same++;
+    else break;
+  }
+  if (same === 2) pts += 2;
+  else if (same === 3) pts += 6;
+  else if (same === 4) pts += 12;
+
+  // runs
+  const runPts = peggingRunPoints(pile);
+  if (runPts >= 3) pts += runPts;
+
+  return pts;
+}
+
+function botChoosePeggingCard(t, playable) {
+  const botP = botSeat(t);
+  const opp = otherPlayer(botP);
+
+  const count = t.peg.count;
+  let best = null; // { card, score }
+
+  for (const c of playable) {
+    const nextCount = count + cardValue(c.rank);
+    const simPile = t.peg.pile.concat([c]);
+    let score = 0;
+
+    // reward immediate points heavily
+    score += evalImmediatePegPointsSim(simPile, nextCount, c) * 10;
+
+    // small preference for hitting 31 exactly
+    if (nextCount === 31) score += 8;
+
+    // defense-ish: avoid leaving 5/10/21 if possible (easy 15/31 setups)
+    if (nextCount === 5 || nextCount === 10) score -= 2.2;
+    if (nextCount === 21) score -= 2.0;
+
+    // prefer lower cards when no score (keeps flexibility)
+    score -= cardValue(c.rank) * 0.15;
+
+    // if opponent is out of cards, prefer moves that allow continuing (avoid getting stuck)
+    const oppLeft = (t.pegHands[opp] || []).length;
+    if (oppLeft === 0) {
+      // if this move would likely block us soon (high count), slight penalty
+      if (nextCount >= 24) score -= 1.0;
+    }
+
+    if (!best || score > best.score) best = { card: c, score };
+  }
+
+  return best.card;
+}
+
+function botPlayCard(t, cardId) {
+  const botP = botSeat(t);
+  if (t.stage !== "pegging") return;
+  if (t.turn !== botP) return;
+
+  const hand = t.pegHands[botP] || [];
+  const idx = hand.findIndex(c => c.id === cardId);
+  if (idx === -1) return;
+
+  const card = hand[idx];
+  const val = cardValue(card.rank);
+  if (t.peg.count + val > 31) return;
+
+  // play it
+  hand.splice(idx, 1);
+  t.pegHands[botP] = hand;
+
+  t.peg.count += val;
+  t.peg.pile.push(card);
+  t.peg.lastPlayer = botP;
+  t.peg.go.PLAYER1 = false;
+  t.peg.go.PLAYER2 = false;
+
+  pushLog(t, `${botP} (BOT) plays ${card.rank}${card.suit}. Count=${t.peg.count}`);
+
+  pegPointsAfterPlay(t, botP, card);
+  if (t.gameOver || t.matchOver) return;
+
+  if (t.peg.count === 31) {
+    resetPegCount(t);
+    t.turn = otherPlayer(botP);
+    pushLog(t, `${t.turn} to play.`);
+    return;
+  }
+
+  const opp = otherPlayer(botP);
+
+  if ((t.pegHands[opp]?.length || 0) === 0) {
+    t.turn = botP;
+    if (!canPlayAny(t.pegHands[botP], t.peg.count) && t.peg.count > 0) {
+      pushLog(t, `${botP} blocked while opponent out — auto ending sequence.`);
+      endSequenceAndContinue(t, botP);
+      return;
+    }
+  } else {
+    t.turn = opp;
+  }
+
+  if (t.pegHands.PLAYER1.length === 0 && t.pegHands.PLAYER2.length === 0) {
+    awardLastCardIfNeeded(t);
+    scoreShowAndAdvance(t);
+    return;
+  }
+}
+
+function botSayGo(t) {
+  const botP = botSeat(t);
+  if (t.stage !== "pegging") return;
+  if (t.turn !== botP) return;
+
+  const opp = otherPlayer(botP);
+  if (canPlayAny(t.pegHands[botP], t.peg.count)) return;
+
+  // Special case: opponent out
+  if ((t.pegHands[opp]?.length || 0) === 0) {
+    pushLog(t, `${botP} is blocked (opponent out) — ending sequence.`);
+    endSequenceAndContinue(t, botP);
+    return;
+  }
+
+  t.peg.go[botP] = true;
+  pushLog(t, `${botP} (BOT) says GO.`);
+
+  if (canPlayAny(t.pegHands[opp], t.peg.count)) {
+    t.turn = opp;
+    pushLog(t, `${opp} to play.`);
+    return;
+  }
+
+  const lead = t.peg.lastPlayer ? t.peg.lastPlayer : otherPlayer(t.dealer);
+  endSequenceAndContinue(t, lead);
+}
+
+/** -------------------------
  * Socket.IO
  * ------------------------- */
 io.on("connection", (socket) => {
 
-  socket.on("join_table", ({ tableId, name }) => {
+  socket.on("join_table", ({ tableId, name, ai }) => {
     tableId = (tableId || "JIM1").toString().trim().slice(0, 24);
     const t = ensureTable(tableId);
 
     let me = null;
     if (!t.players.PLAYER1) me = "PLAYER1";
-    else if (!t.players.PLAYER2) me = "PLAYER2";
+    else if (!t.players.PLAYER2 && !t.bot.enabled) me = "PLAYER2";
     else return socket.emit("error_msg", "Table is full (2 players).");
 
     t.players[me] = socket.id;
@@ -548,12 +817,27 @@ io.on("connection", (socket) => {
     socket.tableId = tableId;
     socket.playerId = me;
 
+    // Enable AI only if:
+    // - requester is PLAYER1
+    // - PLAYER2 seat is empty
+    // - ai flag true
+    if (me === "PLAYER1" && ai && !t.players.PLAYER2) {
+      t.bot.enabled = true;
+      t.names.PLAYER2 = t.bot.name;
+      pushLog(t, `🤖 AI enabled: ${t.bot.name} will join as PLAYER2.`);
+    }
+
     pushLog(t, `${t.names[me]} joined as ${me}.`);
     emitState(tableId);
 
-    if (t.players.PLAYER1 && t.players.PLAYER2 && t.stage === "lobby" && !t.matchOver) {
+    const ready = t.players.PLAYER1 && (t.players.PLAYER2 || t.bot.enabled);
+
+    if (ready && t.stage === "lobby" && !t.matchOver) {
       startHand(t);
       emitState(tableId);
+
+      // If bot is active, it might need to discard once human does, etc.
+      // Nothing to do immediately here.
     }
   });
 
@@ -585,10 +869,21 @@ io.on("connection", (socket) => {
     const p1Done = t.discards.PLAYER1.length === 2;
     const p2Done = t.discards.PLAYER2.length === 2;
 
-    // After discard each has 4 cards
-    if (p1Done && p2Done && t.crib.length === 4) enterPegging(t);
+    if (p1Done && p2Done && t.crib.length === 4) {
+      enterPegging(t);
+      emitState(socket.tableId);
+
+      // If bot is to play first, schedule it
+      if (t.bot.enabled && t.turn === botSeat(t)) scheduleBot(socket.tableId, 450);
+      return;
+    }
 
     emitState(socket.tableId);
+
+    // If bot enabled and hasn't discarded, do it after human discards
+    if (t.bot.enabled && t.stage === "discard" && t.discards[botSeat(t)].length !== 2) {
+      scheduleBot(socket.tableId, 450);
+    }
   });
 
   socket.on("play_card", ({ cardId }) => {
@@ -607,7 +902,6 @@ io.on("connection", (socket) => {
     const val = cardValue(card.rank);
     if (t.peg.count + val > 31) return;
 
-    // play it
     hand.splice(idx, 1);
     t.pegHands[me] = hand;
 
@@ -619,44 +913,49 @@ io.on("connection", (socket) => {
 
     pushLog(t, `${me} plays ${card.rank}${card.suit}. Count=${t.peg.count}`);
 
-    // scoring
     pegPointsAfterPlay(t, me, card);
     if (t.gameOver || t.matchOver) {
-      return emitState(socket.tableId);
+      emitState(socket.tableId);
+      return;
     }
 
-    // handle 31
     if (t.peg.count === 31) {
       resetPegCount(t);
       t.turn = otherPlayer(me);
       pushLog(t, `${t.turn} to play.`);
-      return emitState(socket.tableId);
+      emitState(socket.tableId);
+
+      if (t.bot.enabled && t.turn === botSeat(t)) scheduleBot(socket.tableId, 450);
+      return;
     }
 
     const opp = otherPlayer(me);
 
-    // normal turn passes… BUT if opponent has 0 cards left, keep the turn with the same player
     if ((t.pegHands[opp]?.length || 0) === 0) {
-      t.turn = me; // opponent out; you keep playing if possible
+      t.turn = me;
 
-      // ✅ critical stall fix: if you're blocked at this count, auto-end the sequence and reset
       if (!canPlayAny(t.pegHands[me], t.peg.count) && t.peg.count > 0) {
         pushLog(t, `${me} blocked while opponent out — auto ending sequence.`);
         endSequenceAndContinue(t, me);
-        return emitState(socket.tableId);
+        emitState(socket.tableId);
+
+        if (t.bot.enabled && t.turn === botSeat(t)) scheduleBot(socket.tableId, 450);
+        return;
       }
     } else {
       t.turn = opp;
     }
 
-    // if pegging is over
     if (t.pegHands.PLAYER1.length === 0 && t.pegHands.PLAYER2.length === 0) {
-      // last card + show
       awardLastCardIfNeeded(t);
       scoreShowAndAdvance(t);
+      emitState(socket.tableId);
+      return;
     }
 
     emitState(socket.tableId);
+
+    if (t.bot.enabled && t.turn === botSeat(t)) scheduleBot(socket.tableId, 450);
   });
 
   socket.on("go", () => {
@@ -669,46 +968,51 @@ io.on("connection", (socket) => {
 
     const opp = otherPlayer(me);
 
-    // If I *can* play, GO is not allowed
     if (canPlayAny(t.pegHands[me], t.peg.count)) return;
 
-    // ✅ Special case: opponent has 0 cards left.
-    // If I'm blocked, we MUST end the sequence, reset to 0, and I keep the lead.
     if ((t.pegHands[opp]?.length || 0) === 0) {
       pushLog(t, `${me} is blocked (opponent out) — ending sequence.`);
       endSequenceAndContinue(t, me);
-      return emitState(socket.tableId);
+      emitState(socket.tableId);
+
+      if (t.bot.enabled && t.turn === botSeat(t)) scheduleBot(socket.tableId, 450);
+      return;
     }
 
-    // Normal GO behavior
     t.peg.go[me] = true;
     pushLog(t, `${me} says GO.`);
 
-    // If opponent can play, pass turn
     if (canPlayAny(t.pegHands[opp], t.peg.count)) {
       t.turn = opp;
       pushLog(t, `${opp} to play.`);
-      return emitState(socket.tableId);
+      emitState(socket.tableId);
+
+      if (t.bot.enabled && t.turn === botSeat(t)) scheduleBot(socket.tableId, 450);
+      return;
     }
 
-    // Both cannot play -> end sequence, reset.
     const lead = t.peg.lastPlayer ? t.peg.lastPlayer : otherPlayer(t.dealer);
     endSequenceAndContinue(t, lead);
 
     emitState(socket.tableId);
+
+    if (t.bot.enabled && t.turn === botSeat(t)) scheduleBot(socket.tableId, 450);
   });
 
   socket.on("next_hand", () => {
     const t = tables[socket.tableId];
     if (!t || t.stage !== "show") return;
 
-    // If game ended, do NOT deal another hand
     if (t.gameOver || t.matchOver) return;
 
     t.dealer = otherPlayer(t.dealer);
-    if (t.players.PLAYER1 && t.players.PLAYER2) {
+
+    const ready = t.players.PLAYER1 && (t.players.PLAYER2 || t.bot.enabled);
+    if (ready) {
       startHand(t);
       emitState(socket.tableId);
+
+      // If bot needs to discard later, it will after human discards (scheduled)
     }
   });
 
@@ -716,7 +1020,7 @@ io.on("connection", (socket) => {
     const t = tables[socket.tableId];
     if (!t) return;
 
-    if (!t.gameOver || t.matchOver) return; // only between games; not after match over
+    if (!t.gameOver || t.matchOver) return;
     resetForNewGame(t);
     emitState(socket.tableId);
   });

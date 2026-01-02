@@ -69,7 +69,6 @@ const nameJoinBtn = el("nameJoinBtn");
 let state = null;
 let lastGoSeenTs = 0;
 let modalLocked = false;
-let discardsSeen = { PLAYER1: 0, PLAYER2: 0 };
 
 function cardValue(rank) {
   if (rank === "A") return 1;
@@ -155,9 +154,7 @@ function hideModal() {
   modalOverlay.classList.add("hidden");
 }
 
-if (modalOk) {
-  modalOk.onclick = hideModal;
-}
+if (modalOk) modalOk.onclick = hideModal;
 
 function renderPileAndHud() {
   if (!state) return;
@@ -188,12 +185,11 @@ function renderPileAndHud() {
     lastScore.classList.add("hidden");
   }
 
-  // GO notification:
+  // GO notification: Opponent GO must be acknowledged
   const ge = state.lastGoEvent;
   if (ge && ge.ts && ge.ts !== lastGoSeenTs) {
     lastGoSeenTs = ge.ts;
     const who = ge.player === state.me ? "You" : "Opponent";
-    // Opponent GO should be unmistakable
     if (who === "Opponent") showModal("Opponent said GO");
     else showToast("You said GO");
   }
@@ -285,6 +281,7 @@ function render() {
   renderPileAndHud();
   renderShow();
 
+  // reset buttons
   discardBtn.style.display = "none";
   goBtn.style.display = "none";
   nextHandBtn.style.display = "none";
@@ -292,4 +289,116 @@ function render() {
 
   handArea.innerHTML = "";
 
-  if (state.stage === "l
+  // prevent clicking cards while a modal is up
+  const clickGuard = (fn) => () => { if (!modalLocked) fn(); };
+
+  if (state.stage === "lobby") {
+    handTitle.textContent = "Waiting for crew…";
+    handHelp.textContent = `If this is 2-player, open the same table code on the other device: "${state.tableId}".`;
+    showPanel.classList.add("hidden");
+    return;
+  }
+
+  if (state.stage === "discard") {
+    showPanel.classList.add("hidden");
+
+    const cribOwner = playerName(state.dealer);
+    handTitle.textContent = "Your Hand";
+    handHelp.textContent = `Tap a card to send it to ${cribOwner}'s crib (send 2 total).`;
+
+    const myHand = state.myHand || [];
+    myHand.forEach(card => {
+      const btn = makeCardButton(card, {
+        onClick: clickGuard(() => {
+          socket.emit("discard_one", { cardId: card.id });
+          showToast("Sent to crib");
+        })
+      });
+      handArea.appendChild(btn);
+    });
+
+    return;
+  }
+
+  if (state.stage === "pegging") {
+    showPanel.classList.add("hidden");
+    handTitle.textContent = "Pegging";
+    handHelp.textContent = "Play a card without exceeding 31. If you can’t play, press GO.";
+
+    const myTurn = state.turn === state.me;
+    const myHand = state.myHand || [];
+    const count = state.peg.count;
+
+    myHand.forEach(card => {
+      const playable = myTurn && (count + cardValue(card.rank) <= 31);
+      const btn = makeCardButton(card, {
+        disabled: !playable || modalLocked,
+        onClick: clickGuard(() => socket.emit("play_card", { cardId: card.id }))
+      });
+      handArea.appendChild(btn);
+    });
+
+    const canPlay = myHand.some(c => count + cardValue(c.rank) <= 31);
+    if (myTurn && myHand.length > 0 && !canPlay) {
+      goBtn.style.display = "inline-block";
+      goBtn.onclick = clickGuard(() => socket.emit("go"));
+    }
+    return;
+  }
+
+  if (state.stage === "show") {
+    handTitle.textContent = "Show";
+
+    if (state.matchOver) {
+      handHelp.textContent = `${playerName(state.matchWinner)} wins the match (best of 3).`;
+      newMatchBtn.style.display = "inline-block";
+      newMatchBtn.onclick = clickGuard(() => socket.emit("new_match"));
+    } else if (state.gameOver) {
+      handHelp.textContent = `${playerName(state.gameWinner)} won this game. Tap Continue when ready.`;
+      nextHandBtn.style.display = "inline-block";
+      nextHandBtn.textContent = "Continue";
+      nextHandBtn.onclick = clickGuard(() => socket.emit("next_hand"));
+    } else {
+      handHelp.textContent = "Review scoring. Tap Continue when ready.";
+      nextHandBtn.style.display = "inline-block";
+      nextHandBtn.textContent = "Continue";
+      nextHandBtn.onclick = clickGuard(() => socket.emit("next_hand"));
+    }
+
+    const myHand = state.myHand || [];
+    myHand.forEach(card => handArea.appendChild(makeCardButton(card, { disabled: true })));
+    if (state.cut) handArea.appendChild(makeCardButton(state.cut, { disabled: true }));
+    return;
+  }
+}
+
+// JOIN FLOW
+function doJoin() {
+  const name = (nameInput.value || "").trim().slice(0, 16);
+  const tableId = (tableInput.value || "").trim().slice(0, 24) || "JIM1";
+  const vsAI = !!vsAiInput?.checked;
+
+  if (!name) { alert("Enter a name."); return; }
+  socket.emit("join_table", { tableId, name, vsAI });
+  joinOverlay.style.display = "none";
+}
+
+// Pre-fill from URL if present
+(function initJoinDefaults(){
+  const qs = new URLSearchParams(location.search);
+  const table = (qs.get("table") || "JIM1").toString().trim().slice(0, 24);
+  const name = (qs.get("name") || "").toString().trim().slice(0, 16);
+  tableInput.value = table;
+  if (name) nameInput.value = name;
+})();
+
+nameJoinBtn.onclick = doJoin;
+nameInput.addEventListener("keydown", (e)=>{ if (e.key === "Enter") doJoin(); });
+tableInput.addEventListener("keydown", (e)=>{ if (e.key === "Enter") doJoin(); });
+
+socket.on("state", (s) => {
+  state = s;
+  render();
+});
+
+socket.on("error_msg", (msg) => alert(msg));

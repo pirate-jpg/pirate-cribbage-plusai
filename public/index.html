@@ -1,4 +1,3 @@
-<!-- public/index.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -9,15 +8,27 @@
 </head>
 
 <body>
-  <!-- TOAST (non-sticky) -->
+  <!-- TOAST (kept for non-critical notices) -->
   <div id="toast" class="toast"></div>
 
-  <!-- STICKY MODAL (for opponent GO) -->
-  <div id="modalOverlay" class="modalOverlay hidden">
+  <!-- GO MODAL (sticky + must dismiss) -->
+  <div id="goModal" class="modalOverlay hidden" role="dialog" aria-modal="true">
     <div class="modalCard">
-      <div id="modalTitle" class="modalTitle">Message</div>
-      <div id="modalText" class="modalText">—</div>
-      <button id="modalBtn" class="btn primary big">Aye</button>
+      <div class="modalTitle">⚓ GO!</div>
+      <div id="goModalText" class="modalText">Opponent said GO.</div>
+      <button id="goModalOk" class="btn primary big">Aye</button>
+    </div>
+  </div>
+
+  <!-- GAME OVER MODAL (sticky) -->
+  <div id="gameModal" class="modalOverlay hidden" role="dialog" aria-modal="true">
+    <div class="modalCard">
+      <div class="modalTitle">🏁 Game Over</div>
+      <div id="gameModalText" class="modalText">—</div>
+      <div class="modalRow">
+        <button id="gameModalNext" class="btn primary big">Next Game</button>
+        <button id="gameModalNewMatch" class="btn primary big" style="display:none;">New Match</button>
+      </div>
     </div>
   </div>
 

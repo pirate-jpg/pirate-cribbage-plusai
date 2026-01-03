@@ -8,14 +8,15 @@
 </head>
 
 <body>
-  <!-- TOAST -->
+  <!-- TOAST (non-sticky misc notifications) -->
   <div id="toast" class="toast"></div>
 
-  <!-- MODAL (sticky notifications like opponent GO) -->
-  <div id="modalOverlay" class="modalOverlay hidden">
+  <!-- STICKY GO MODAL (opponent GO) -->
+  <div id="goModal" class="modalOverlay hidden">
     <div class="modalCard">
-      <div id="modalText" class="modalText">—</div>
-      <button id="modalOk" class="btn primary big">OK</button>
+      <div class="modalTitle">🏴‍☠️ GO!</div>
+      <div id="goModalText" class="modalText">Opponent said GO.</div>
+      <button id="goModalBtn" class="btn primary big">Aye</button>
     </div>
   </div>
 
@@ -142,7 +143,7 @@
           <div class="actionRow">
             <button id="discardBtn" class="btn primary" style="display:none;">Send to Crib</button>
             <button id="goBtn" class="btn go" style="display:none;">GO</button>
-            <button id="nextHandBtn" class="btn primary" style="display:none;">Continue</button>
+            <button id="nextHandBtn" class="btn primary" style="display:none;">Next Hand</button>
             <button id="newMatchBtn" class="btn primary" style="display:none;">New Match</button>
           </div>
 

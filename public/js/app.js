@@ -56,12 +56,6 @@ const cTotal = el("cTotal");
 // Toast
 const toast = el("toast");
 
-// Sticky modal (opponent GO)
-const modalOverlay = el("modalOverlay");
-const modalTitle = el("modalTitle");
-const modalText = el("modalText");
-const modalBtn = el("modalBtn");
-
 // Join overlay
 const joinOverlay = el("joinOverlay");
 const nameInput = el("nameInput");
@@ -69,8 +63,20 @@ const tableInput = el("tableInput");
 const vsAiInput = el("vsAiInput");
 const nameJoinBtn = el("nameJoinBtn");
 
+// GO modal
+const goModal = el("goModal");
+const goModalText = el("goModalText");
+const goModalOk = el("goModalOk");
+
+// Game Over modal
+const gameModal = el("gameModal");
+const gameModalText = el("gameModalText");
+const gameModalNext = el("gameModalNext");
+const gameModalNewMatch = el("gameModalNewMatch");
+
 let state = null;
 let lastGoSeenTs = 0;
+let lastGameOverShownKey = ""; // prevents re-showing modal on every state emit
 
 function cardValue(rank) {
   if (rank === "A") return 1;
@@ -147,12 +153,67 @@ function showToast(msg) {
   showToast._t = setTimeout(() => toast.classList.remove("show"), 2200);
 }
 
-function showModal(title, msg) {
-  modalTitle.textContent = title;
-  modalText.textContent = msg;
-  modalOverlay.classList.remove("hidden");
-  modalBtn.onclick = () => modalOverlay.classList.add("hidden");
+function showModal(modalEl) {
+  if (!modalEl) return;
+  modalEl.classList.remove("hidden");
 }
+
+function hideModal(modalEl) {
+  if (!modalEl) return;
+  modalEl.classList.add("hidden");
+}
+
+// Sticky GO modal: show ONLY when opponent says GO (per your preference)
+function maybeShowGoModal() {
+  const ge = state?.lastGoEvent;
+  if (!ge || !ge.ts) return;
+  if (ge.ts === lastGoSeenTs) return;
+
+  lastGoSeenTs = ge.ts;
+
+  // Only show if opponent said GO
+  if (ge.player === state.me) return;
+
+  const who = ge.player === state.me ? "You" : "Opponent";
+  goModalText.textContent = `${who} said GO`;
+  showModal(goModal);
+}
+
+goModalOk.onclick = () => hideModal(goModal);
+
+// Game over modal: show once per game end
+function maybeShowGameOverModal() {
+  if (!state) return;
+  if (state.stage !== "show") return;
+  if (!state.gameOver) return;
+
+  const key = `${state.tableId}|${state.matchWins?.PLAYER1 ?? 0}|${state.matchWins?.PLAYER2 ?? 0}|${state.scores?.PLAYER1 ?? 0}|${state.scores?.PLAYER2 ?? 0}|${state.gameWinner ?? ""}|${state.matchOver ? "M" : "G"}`;
+  if (key === lastGameOverShownKey) return;
+  lastGameOverShownKey = key;
+
+  const winnerName = playerName(state.gameWinner);
+  if (state.matchOver) {
+    const matchWinnerName = playerName(state.matchWinner);
+    gameModalText.textContent = `${winnerName} won this game.\n\n${matchWinnerName} wins the match (best of 3).`;
+    gameModalNewMatch.style.display = "inline-block";
+    gameModalNext.textContent = "Next Game";
+  } else {
+    gameModalText.textContent = `${winnerName} won this game.\n\nPress Next Game when you’re ready.`;
+    gameModalNewMatch.style.display = "none";
+    gameModalNext.textContent = "Next Game";
+  }
+
+  showModal(gameModal);
+}
+
+gameModalNext.onclick = () => {
+  hideModal(gameModal);
+  socket.emit("next_hand");
+};
+gameModalNewMatch.onclick = () => {
+  hideModal(gameModal);
+  socket.emit("new_match");
+};
 
 function renderPileAndHud() {
   if (!state) return;
@@ -185,20 +246,8 @@ function renderPileAndHud() {
     lastScore.classList.add("hidden");
   }
 
-  // GO notification
-  const ge = state.lastGoEvent;
-  if (ge && ge.ts && ge.ts !== lastGoSeenTs) {
-    lastGoSeenTs = ge.ts;
-    const who = ge.player === state.me ? "You" : "Opponent";
-
-    // Sticky modal ONLY for opponent GO (your request)
-    if (ge.player !== state.me) {
-      showModal("GO!", `${who} said GO.`);
-    } else {
-      // optional small toast for your own GO (non-sticky)
-      showToast(`${who} said GO`);
-    }
-  }
+  // Sticky GO modal
+  maybeShowGoModal();
 }
 
 function renderBreakdown(listEl, breakdown) {
@@ -287,7 +336,7 @@ function render() {
   renderPileAndHud();
   renderShow();
 
-  // reset buttons
+  // buttons
   discardBtn.style.display = "none";
   goBtn.style.display = "none";
   nextHandBtn.style.display = "none";
@@ -295,6 +344,7 @@ function render() {
 
   handArea.innerHTML = "";
 
+  // STAGES
   if (state.stage === "lobby") {
     handTitle.textContent = "Waiting for crew…";
     handHelp.textContent = `If this is 2-player, open the same table code on the other device: "${state.tableId}".`;
@@ -312,12 +362,14 @@ function render() {
     const myHand = state.myHand || [];
     myHand.forEach(card => {
       const btn = makeCardButton(card, {
-        onClick: () => socket.emit("discard_one", { cardId: card.id })
+        onClick: () => {
+          socket.emit("discard_one", { cardId: card.id });
+          showToast("Sent to crib");
+        }
       });
       handArea.appendChild(btn);
     });
 
-    discardBtn.style.display = "none";
     return;
   }
 
@@ -365,6 +417,10 @@ function render() {
     const myHand = state.myHand || [];
     myHand.forEach(card => handArea.appendChild(makeCardButton(card, { disabled: true })));
     if (state.cut) handArea.appendChild(makeCardButton(state.cut, { disabled: true }));
+
+    // Sticky game-over modal
+    maybeShowGameOverModal();
+
     return;
   }
 }
@@ -380,7 +436,6 @@ function doJoin() {
   joinOverlay.style.display = "none";
 }
 
-// Pre-fill from URL if present
 (function initJoinDefaults(){
   const qs = new URLSearchParams(location.search);
   const table = (qs.get("table") || "JIM1").toString().trim().slice(0, 24);
@@ -392,6 +447,10 @@ function doJoin() {
 nameJoinBtn.onclick = doJoin;
 nameInput.addEventListener("keydown", (e)=>{ if (e.key === "Enter") doJoin(); });
 tableInput.addEventListener("keydown", (e)=>{ if (e.key === "Enter") doJoin(); });
+
+socket.on("connect", () => {
+  // idle until Set Sail
+});
 
 socket.on("state", (s) => {
   state = s;

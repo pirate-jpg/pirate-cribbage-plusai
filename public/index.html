@@ -8,15 +8,15 @@
 </head>
 
 <body>
-  <!-- TOAST (non-sticky misc notifications) -->
+  <!-- TOAST (non-sticky quick notifications, NOT GO anymore) -->
   <div id="toast" class="toast"></div>
 
-  <!-- STICKY GO MODAL (opponent GO) -->
-  <div id="goModal" class="modalOverlay hidden">
+  <!-- STICKY MODAL (GO / GAME OVER) -->
+  <div id="modalOverlay" class="modalOverlay hidden">
     <div class="modalCard">
-      <div class="modalTitle">🏴‍☠️ GO!</div>
-      <div id="goModalText" class="modalText">Opponent said GO.</div>
-      <button id="goModalBtn" class="btn primary big">Aye</button>
+      <div id="modalTitle" class="modalTitle">—</div>
+      <div id="modalText" class="modalText">—</div>
+      <button id="modalOkBtn" class="btn primary big">Aye</button>
     </div>
   </div>
 

@@ -53,21 +53,24 @@ const ndTotal = el("ndTotal");
 const dTotal = el("dTotal");
 const cTotal = el("cTotal");
 
-// Toast (non-sticky)
+// Toast
 const toast = el("toast");
 
-// Sticky modal
+// Sticky modal (opponent GO)
 const modalOverlay = el("modalOverlay");
 const modalTitle = el("modalTitle");
 const modalText = el("modalText");
-const modalOkBtn = el("modalOkBtn");
+const modalBtn = el("modalBtn");
+
+// Join overlay
+const joinOverlay = el("joinOverlay");
+const nameInput = el("nameInput");
+const tableInput = el("tableInput");
+const vsAiInput = el("vsAiInput");
+const nameJoinBtn = el("nameJoinBtn");
 
 let state = null;
 let lastGoSeenTs = 0;
-
-// Game-over popup gating
-let lastGameSeqSeen = 0;
-let gameOverAckForSeq = 0;
 
 function cardValue(rank) {
   if (rank === "A") return 1;
@@ -144,18 +147,11 @@ function showToast(msg) {
   showToast._t = setTimeout(() => toast.classList.remove("show"), 2200);
 }
 
-function showModal(title, text, onOk) {
-  modalTitle.textContent = title || "Ahoy!";
-  modalText.textContent = text || "";
+function showModal(title, msg) {
+  modalTitle.textContent = title;
+  modalText.textContent = msg;
   modalOverlay.classList.remove("hidden");
-  modalOkBtn.onclick = () => {
-    modalOverlay.classList.add("hidden");
-    if (typeof onOk === "function") onOk();
-  };
-}
-
-function isModalOpen() {
-  return !modalOverlay.classList.contains("hidden");
+  modalBtn.onclick = () => modalOverlay.classList.add("hidden");
 }
 
 function renderPileAndHud() {
@@ -189,14 +185,18 @@ function renderPileAndHud() {
     lastScore.classList.add("hidden");
   }
 
-  // STICKY GO notification (only when opponent says GO)
+  // GO notification
   const ge = state.lastGoEvent;
   if (ge && ge.ts && ge.ts !== lastGoSeenTs) {
     lastGoSeenTs = ge.ts;
+    const who = ge.player === state.me ? "You" : "Opponent";
 
-    // only pop for opponent / AI (per your preference)
+    // Sticky modal ONLY for opponent GO (your request)
     if (ge.player !== state.me) {
-      showModal("GO!", `${playerName(ge.player)} can’t play. Your move.`, () => {});
+      showModal("GO!", `${who} said GO.`);
+    } else {
+      // optional small toast for your own GO (non-sticky)
+      showToast(`${who} said GO`);
     }
   }
 }
@@ -259,30 +259,6 @@ function renderShow() {
   cTotal.textContent = `Total: ${cr.breakdown.total}`;
 }
 
-function maybeShowGameOverModalOnce() {
-  if (!state) return;
-  if (!state.gameOver) return;
-
-  const seq = state.gameSeq || 0;
-
-  // show once per gameSeq
-  if (seq !== 0 && seq !== lastGameSeqSeen) {
-    lastGameSeqSeen = seq;
-
-    const winner = playerName(state.gameWinner);
-    const youWon = (state.gameWinner === state.me);
-
-    // require acknowledgement before next hand
-    gameOverAckForSeq = 0;
-
-    showModal(
-      "Game Over",
-      youWon ? `🏴‍☠️ You won! (${winner})` : `☠️ ${winner} won this one.`,
-      () => { gameOverAckForSeq = seq; }
-    );
-  }
-}
-
 function render() {
   if (!state) return;
 
@@ -319,7 +295,6 @@ function render() {
 
   handArea.innerHTML = "";
 
-  // STAGES
   if (state.stage === "lobby") {
     handTitle.textContent = "Waiting for crew…";
     handHelp.textContent = `If this is 2-player, open the same table code on the other device: "${state.tableId}".`;
@@ -332,15 +307,12 @@ function render() {
 
     const cribOwner = playerName(state.dealer);
     handTitle.textContent = "Your Hand";
-    handHelp.textContent = `Tap a card to send it to ${cribOwner}'s crib (send 2 total).`;
+    handHelp.textContent = `Click a card to send it to ${cribOwner}'s crib (send 2 total).`;
 
     const myHand = state.myHand || [];
     myHand.forEach(card => {
       const btn = makeCardButton(card, {
-        onClick: () => {
-          socket.emit("discard_one", { cardId: card.id });
-          showToast("Sent to crib");
-        }
+        onClick: () => socket.emit("discard_one", { cardId: card.id })
       });
       handArea.appendChild(btn);
     });
@@ -382,17 +354,7 @@ function render() {
       : "Review scoring. Click Next Hand when ready.";
 
     nextHandBtn.style.display = "inline-block";
-    nextHandBtn.onclick = () => {
-      // If game over, require you to acknowledge the modal before moving on
-      if (state.gameOver) {
-        const seq = state.gameSeq || 0;
-        if (gameOverAckForSeq !== seq) {
-          showModal("Game Over", "Acknowledge the result first, Captain.", () => { gameOverAckForSeq = seq; });
-          return;
-        }
-      }
-      socket.emit("next_hand");
-    };
+    nextHandBtn.onclick = () => socket.emit("next_hand");
 
     if (state.matchOver) {
       newMatchBtn.style.display = "inline-block";
@@ -403,10 +365,6 @@ function render() {
     const myHand = state.myHand || [];
     myHand.forEach(card => handArea.appendChild(makeCardButton(card, { disabled: true })));
     if (state.cut) handArea.appendChild(makeCardButton(state.cut, { disabled: true }));
-
-    // pop game over modal once per game
-    maybeShowGameOverModalOnce();
-
     return;
   }
 }
@@ -422,13 +380,6 @@ function doJoin() {
   joinOverlay.style.display = "none";
 }
 
-// Join overlay elements
-const joinOverlay = el("joinOverlay");
-const nameInput = el("nameInput");
-const tableInput = el("tableInput");
-const vsAiInput = el("vsAiInput");
-const nameJoinBtn = el("nameJoinBtn");
-
 // Pre-fill from URL if present
 (function initJoinDefaults(){
   const qs = new URLSearchParams(location.search);
@@ -442,14 +393,8 @@ nameJoinBtn.onclick = doJoin;
 nameInput.addEventListener("keydown", (e)=>{ if (e.key === "Enter") doJoin(); });
 tableInput.addEventListener("keydown", (e)=>{ if (e.key === "Enter") doJoin(); });
 
-socket.on("connect", () => {
-  // idle until Set Sail
-});
-
 socket.on("state", (s) => {
   state = s;
-
-  // If a modal is up, we still render (so board updates), but we keep the modal.
   render();
 });
 

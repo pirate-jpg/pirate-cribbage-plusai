@@ -46,7 +46,7 @@ body{
   background:#00000022;
 }
 
-/* Layout */
+/* Layout — standardized */
 .page{ padding:18px; }
 .grid{
   display:grid;
@@ -99,6 +99,8 @@ body{
 }
 .scoreTitle{ font-size:12px; color:var(--muted); margin-bottom:6px; }
 .scoreText{ font-size:16px; font-weight:900; }
+
+.crewButtons{ margin-top:12px; display:flex; gap:10px; flex-wrap:wrap; }
 
 /* Board */
 .woodFrame{
@@ -319,7 +321,7 @@ body{
   opacity:0.95;
 }
 
-/* Selection highlight */
+/* Selection highlight (NO BLUE/WHITE) */
 .cardBtn.selected{
   outline: 4px solid var(--amber);
   outline-offset: 3px;
@@ -373,6 +375,13 @@ body{
   color:var(--text);
   font-weight:900;
 }
+.checkRow{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  margin: 10px 0 12px;
+  color: var(--text);
+}
 .toast{
   position: fixed;
   top: 14px;
@@ -396,33 +405,42 @@ body{
 }
 .overlayHint{ margin-top:12px; color:#d5c8a6; font-size:12px; opacity:0.9; }
 
-/* Sticky modal */
+/* MODALS (GO + GAME OVER) */
 .modalOverlay{
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,0.55);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 18px;
-  z-index: 10000;
+  position:fixed;
+  inset:0;
+  background: rgba(0,0,0,0.68);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:18px;
+  z-index:10000;
 }
 .modalCard{
-  width: min(520px, 94vw);
-  border-radius: 18px;
-  border: 1px solid #ffffff22;
+  width:min(520px, 94vw);
+  border-radius:18px;
+  border:1px solid #ffffff22;
   background: linear-gradient(180deg, #0b2f43ee 0%, #071f2dee 100%);
   box-shadow: var(--shadow);
-  padding: 18px;
+  padding:18px;
+  text-align:center;
 }
 .modalTitle{
-  font-size: 22px;
-  font-weight: 1000;
+  font-size:22px;
+  font-weight:1000;
   color: var(--gold);
-  margin-bottom: 8px;
+  margin-bottom:8px;
 }
 .modalText{
   color: var(--text);
-  font-size: 15px;
-  margin-bottom: 14px;
+  font-weight:800;
+  line-height:1.35;
+  white-space:pre-line;
+  margin-bottom:14px;
+}
+.modalRow{
+  display:flex;
+  gap:12px;
+  justify-content:center;
+  flex-wrap:wrap;
 }

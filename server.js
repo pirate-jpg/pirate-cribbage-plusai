@@ -24,7 +24,6 @@ app.get("/", (_req, res) => res.sendFile(path.join(__dirname, "public", "index.h
  *  matchWins: { PLAYER1: n, PLAYER2: n },
  *  matchOver: bool, matchWinner: "PLAYER1"|"PLAYER2"|null,
  *  gameOver: bool, gameWinner: "PLAYER1"|"PLAYER2"|null,
- *  gameSeq: number,   // increments each game (for client popups)
  *  discardsCount: { PLAYER1: 0..2, PLAYER2: 0..2 },
  *  peg: { count, pile, passed, lastPlayer },
  *  lastPegEvent: { player, pts, reasons } | null
@@ -233,7 +232,6 @@ function makeTable(tableId) {
     matchWinner: null,
     gameOver: false,
     gameWinner: null,
-    gameSeq: 1, // increments per game
     discardsCount: { PLAYER1: 0, PLAYER2: 0 },
 
     deck: [],
@@ -282,9 +280,6 @@ function resetForNewGame(t) {
   t.turn = t.dealer;
 
   t.stage = "lobby";
-
-  // increment game sequence so clients can show “new game over” modal once
-  t.gameSeq = (t.gameSeq || 1) + 1;
 }
 
 function resetForNewMatch(t) {
@@ -292,7 +287,6 @@ function resetForNewMatch(t) {
   t.matchOver = false;
   t.matchWinner = null;
   t.dealer = "PLAYER1";
-  t.gameSeq = 1;
   resetForNewGame(t);
 }
 
@@ -314,7 +308,7 @@ function dealHand(t) {
   t.pegHands.PLAYER2 = [];
 
   t.stage = "discard";
-  t.turn = otherPlayer(t.dealer); // non-dealer acts first in pegging, but discard both can act anytime
+  t.turn = otherPlayer(t.dealer); // discard doesn't really use turn, but keep consistent
   t.peg = { count: 0, pile: [], passed: { PLAYER1: false, PLAYER2: false }, lastPlayer: null };
   t.lastPegEvent = null;
   t.lastGoEvent = null;
@@ -346,7 +340,6 @@ function emitStateToTable(t) {
     matchWinner: t.matchWinner,
     gameOver: t.gameOver,
     gameWinner: t.gameWinner,
-    gameSeq: t.gameSeq,
     discardsCount: { ...t.discardsCount },
     cut: t.cut,
     peg: t.peg,
@@ -374,114 +367,69 @@ function emitStateToTable(t) {
 }
 
 // ---------- AI (smarter) ----------
-function isFive(card) { return card.rank === "5"; }
+function aiChooseDiscard(hand6) {
+  // Choose discard pair that maximizes expected hand score over all possible cuts.
+  // (Not full crib EV, but far smarter than "discard two highest".)
+  if (!hand6 || hand6.length !== 6) return hand6?.slice(0, 2) || [];
 
-function discardsSynergyScore(a, b) {
-  // Positive means “good for crib”; negative means “dangerous to give away”
-  let s = 0;
-  const va = cardValue(a.rank), vb = cardValue(b.rank);
-  const ra = rankOrder(a.rank), rb = rankOrder(b.rank);
+  const all = hand6.slice();
+  const best = { score: -Infinity, keep: null, disc: null };
 
-  // 5s are huge crib fuel
-  if (isFive(a)) s += 7;
-  if (isFive(b)) s += 7;
+  // possible cuts are any card NOT in the 6-card hand (46 cards)
+  const fullDeck = makeDeck();
+  const inHandIds = new Set(all.map(c => c.id));
+  const possibleCuts = fullDeck.filter(c => !inHandIds.has(c.id));
 
-  // pairs help crib a lot
-  if (a.rank === b.rank) s += 4;
+  // enumerate all discard pairs
+  for (let i = 0; i < all.length; i++) {
+    for (let j = i + 1; j < all.length; j++) {
+      const disc = [all[i], all[j]];
+      const keep = all.filter((_, idx) => idx !== i && idx !== j); // 4 cards
 
-  // near-runs help crib
-  const d = Math.abs(ra - rb);
-  if (d === 1) s += 2;
-  if (d === 2) s += 1;
-
-  // makes 15 with partner easily
-  if (va + vb === 15) s += 3;
-  if (va === 10 || vb === 10) s += 0.5; // tens feed 15s with 5s
-
-  return s;
-}
-
-function estimateHandValueMonteCarlo(keep4, deckRemainder, trials = 18) {
-  // quick expected value of keep4 with random cut from remainder
-  if (!deckRemainder.length) return 0;
-  let total = 0;
-  for (let i = 0; i < trials; i++) {
-    const cut = deckRemainder[(Math.random() * deckRemainder.length) | 0];
-    total += scoreHandWithBreakdown(keep4, cut, false).total;
-  }
-  return total / trials;
-}
-
-function aiChooseDiscardSmart(t, hand6, aiIsDealer) {
-  // evaluate all discard pairs: maximize (expected keep score + crib factor depending on dealer)
-  // if AI is dealer, add crib synergy; else subtract (avoid feeding opponent crib)
-  const deckAll = makeDeck();
-  const idsInHand = new Set(hand6.map(c => c.id));
-  const remainder = deckAll.filter(c => !idsInHand.has(c.id));
-
-  let best = null;
-  let bestScore = -1e9;
-
-  for (let i = 0; i < hand6.length; i++) {
-    for (let j = i + 1; j < hand6.length; j++) {
-      const disc = [hand6[i], hand6[j]];
-      const keep = hand6.filter((_, idx) => idx !== i && idx !== j);
-
-      const keepEV = estimateHandValueMonteCarlo(keep, remainder, 18);
-
-      // crib pressure heuristic
-      const cribSy = discardsSynergyScore(disc[0], disc[1]);
-
-      // also punish throwing single 5 (even if synergy low) to opponent
-      let singleFivePenalty = 0;
-      if (!aiIsDealer) {
-        if (isFive(disc[0])) singleFivePenalty -= 6;
-        if (isFive(disc[1])) singleFivePenalty -= 6;
+      let sum = 0;
+      for (const cut of possibleCuts) {
+        sum += scoreHandWithBreakdown(keep, cut, false).total;
       }
+      const avg = sum / possibleCuts.length;
 
-      const totalScore = keepEV + (aiIsDealer ? (cribSy * 0.9) : (-cribSy * 1.15)) + singleFivePenalty;
+      // slight preference for keeping lower pegging values (helps pegging)
+      const pegBias = keep.reduce((s, c) => s + cardValue(c.rank), 0) * 0.02;
 
-      if (totalScore > bestScore) {
-        bestScore = totalScore;
-        best = disc;
+      const totalScore = avg - pegBias;
+
+      if (totalScore > best.score) {
+        best.score = totalScore;
+        best.keep = keep;
+        best.disc = disc;
       }
     }
   }
-  return best || [hand6[0], hand6[1]];
+
+  return best.disc || [hand6[0], hand6[1]];
 }
 
-function aiChoosePegCardSmart(t, hand, count, pile) {
+function aiChoosePegCard(hand, count, pile) {
+  // Choose playable card maximizing immediate pegging points.
   const playable = hand.filter(c => count + cardValue(c.rank) <= 31);
   if (!playable.length) return null;
 
-  // choose card that maximizes (immediate pegging points + positional heuristics)
-  let best = playable[0];
-  let bestScore = -1e9;
+  let best = null;
+  let bestScore = -Infinity;
 
   for (const c of playable) {
     const newCount = count + cardValue(c.rank);
     const { pts } = scorePegPlay(pile, c, newCount);
 
-    // “good” landing spots make it harder for opponent to hit 15/31
-    const awkward = (newCount === 21 || newCount === 26 || newCount === 27 || newCount === 28 || newCount === 29 || newCount === 30);
-    const hits15 = (newCount === 15);
-    const setsOpponentUp31 = (31 - newCount) <= 10; // opponent may have a 10-value
+    // primary: points
+    let score = pts * 100;
 
-    // Slight preference: keep low cards for later flexibility if no points now
-    const keepLowBias = (10 - cardValue(c.rank)) * 0.08;
+    // tie-breakers:
+    // prefer hitting 31 exactly, then prefer lower remaining count to avoid giving easy 15/31.
+    if (newCount === 31) score += 50;
+    score += (31 - newCount) * 0.5;
 
-    let score = 0;
-    score += pts * 4.0;
-    if (awkward) score += 0.8;
-    if (hits15) score += 0.6;
-    if (setsOpponentUp31) score -= 0.35;
-    score += keepLowBias;
-
-    // avoid leading with a 5 unless it scores or is forced
-    if (c.rank === "5" && pts === 0) score -= 0.9;
-
-    // small random jitter to avoid feeling robotic
-    score += (Math.random() - 0.5) * 0.05;
+    // slight preference to dump high cards earlier if no pts
+    score += cardValue(c.rank) * 0.2;
 
     if (score > bestScore) {
       bestScore = score;
@@ -505,39 +453,73 @@ function aiDoDiscardIfNeeded(t) {
   const hand = t.hands[ap];
   if (hand.length < needed) return;
 
-  const aiIsDealer = (t.dealer === ap);
-  const picks = aiChooseDiscardSmart(t, hand, aiIsDealer).slice(0, needed);
-
+  const picks = aiChooseDiscard(hand).slice(0, needed);
   for (const c of picks) {
     internalDiscardOne(t, ap, c.id);
   }
 }
 
-function aiMaybeAct(t) {
-  if (!t.ai.enabled) return;
-  if (t.matchOver || t.gameOver) return;
+function aiMaybeActOnce(t) {
+  if (!t.ai.enabled) return false;
+  if (t.matchOver || t.gameOver) return false;
 
   const ap = t.ai.aiPlayer;
 
   // AI discard
   if (t.stage === "discard") {
+    const before = t.discardsCount[ap];
     aiDoDiscardIfNeeded(t);
+
+    // if now both complete, progress
     if (t.discardsCount.PLAYER1 === 2 && t.discardsCount.PLAYER2 === 2) {
       beginPegging(t);
     }
-    return;
+
+    return t.discardsCount[ap] !== before || t.stage === "pegging";
   }
 
   // AI pegging
   if (t.stage === "pegging" && t.turn === ap) {
     const count = t.peg.count;
-    const card = aiChoosePegCardSmart(t.pegHands[ap], count, t.peg.pile);
+    const card = aiChoosePegCard(t.pegHands[ap], count, t.peg.pile);
     if (card) {
       internalPlayCard(t, ap, card.id);
     } else {
       internalGo(t, ap);
     }
+    return true;
   }
+
+  return false;
+}
+
+// Run AI repeatedly (bounded) so it never "stalls" the table.
+function aiRun(t, maxSteps = 12) {
+  try {
+    for (let i = 0; i < maxSteps; i++) {
+      const acted = aiMaybeActOnce(t);
+      if (!acted) break;
+      if (!t.ai.enabled) break;
+      if (t.matchOver || t.gameOver) break;
+      // stop once it's not AI's turn anymore in pegging
+      if (t.stage === "pegging" && t.turn !== t.ai.aiPlayer) break;
+    }
+  } catch (err) {
+    console.error("AI error:", err);
+  }
+}
+
+// Schedule AI + emit, so every state transition can "kick" AI safely.
+function kickAIAndEmit(t) {
+  if (!t) return;
+  // Emit first so the human sees immediate state, then AI acts and we re-emit.
+  emitStateToTable(t);
+  if (!t.ai.enabled) return;
+
+  setTimeout(() => {
+    aiRun(t);
+    emitStateToTable(t);
+  }, 10);
 }
 
 // ---------- Discard / Pegging / Show ----------
@@ -586,7 +568,6 @@ function playableExists(hand, count) {
 }
 
 function maybeEndCountAndReset(t) {
-  // if both passed OR nobody can play (with cards remaining), award last card to lastPlayer (if any)
   const p1Has = t.pegHands.PLAYER1.length > 0;
   const p2Has = t.pegHands.PLAYER2.length > 0;
   const anyCards = p1Has || p2Has;
@@ -599,7 +580,6 @@ function maybeEndCountAndReset(t) {
 
   if (!(bothPassed || nobodyCanPlay || t.peg.count === 31)) return false;
 
-  // If count hit 31, pile resets automatically; 31 points already handled by scoring
   // If not 31, award 1 point "go / last card" to lastPlayer (if exists)
   if (t.peg.count !== 31 && t.peg.lastPlayer) {
     t.scores[t.peg.lastPlayer] += 1;
@@ -610,9 +590,8 @@ function maybeEndCountAndReset(t) {
   t.peg.pile = [];
   t.peg.passed = { PLAYER1: false, PLAYER2: false };
 
-  // IMPORTANT RULE FIX:
-  // After a go (or 31), the player who played the last card leads the next count.
-  if (t.peg.lastPlayer) t.turn = t.peg.lastPlayer;
+  // turn becomes player after lastPlayer
+  if (t.peg.lastPlayer) t.turn = otherPlayer(t.peg.lastPlayer);
 
   return true;
 }
@@ -660,10 +639,7 @@ function maybeEndGameOrMatch(t) {
   if (p1 < 121 && p2 < 121) return false;
 
   t.gameOver = true;
-  t.gameWinner =
-    p1 >= 121 && p2 >= 121
-      ? (p1 >= p2 ? "PLAYER1" : "PLAYER2")
-      : (p1 >= 121 ? "PLAYER1" : "PLAYER2");
+  t.gameWinner = p1 >= 121 && p2 >= 121 ? (p1 >= p2 ? "PLAYER1" : "PLAYER2") : (p1 >= 121 ? "PLAYER1" : "PLAYER2");
 
   // best of 3 => first to 2 wins
   t.matchWins[t.gameWinner] += 1;
@@ -673,7 +649,7 @@ function maybeEndGameOrMatch(t) {
     t.matchWinner = t.gameWinner;
   }
 
-  // stay in show when you reach it, but gameOver/matchOver becomes true
+  // stay in show so you can see the breakdown, but gameOver/matchOver becomes true
   return true;
 }
 
@@ -709,7 +685,7 @@ function internalPlayCard(t, player, cardId) {
   // playing a card clears your "passed" status
   t.peg.passed[player] = false;
 
-  // if hit 31, reset immediately (no "go" points; 31 already handled)
+  // if hit 31, reset immediately (no "go" points)
   if (t.peg.count === 31) {
     maybeEndCountAndReset(t);
   } else {
@@ -738,9 +714,7 @@ function internalGo(t, player) {
   // turn passes to other player
   t.turn = otherPlayer(player);
 
-  // if count should end, reset and continue
   maybeEndCountAndReset(t);
-
   maybeAdvanceToShow(t);
   maybeEndGameOrMatch(t);
 
@@ -756,11 +730,12 @@ io.on("connection", (socket) => {
 
     const t = getOrCreateTable(tid);
 
-    // If table already has PLAYER1, fill PLAYER2; else fill PLAYER1
     let slot = null;
     if (!t.players.PLAYER1) slot = "PLAYER1";
     else if (!t.players.PLAYER2) slot = "PLAYER2";
-    else return socket.emit("error_msg", "Table full.");
+    else {
+      return socket.emit("error_msg", "Table full.");
+    }
 
     // Configure AI if requested and joining as PLAYER1
     if (slot === "PLAYER1") {
@@ -781,6 +756,7 @@ io.on("connection", (socket) => {
 
     socket.join(tid);
 
+    // Auto-start if possible
     if (t.ai.enabled && t.players.PLAYER1 && t.players.PLAYER2) {
       if (t.matchOver) resetForNewMatch(t);
       if (t.gameOver) resetForNewGame(t);
@@ -789,9 +765,7 @@ io.on("connection", (socket) => {
       startHandIfPossible(t);
     }
 
-    emitStateToTable(t);
-    aiMaybeAct(t);
-    emitStateToTable(t);
+    kickAIAndEmit(t);
   });
 
   // Single-card discard
@@ -800,17 +774,17 @@ io.on("connection", (socket) => {
     if (!t || !p) return;
 
     const ok = internalDiscardOne(t, p, String(cardId));
-    if (!ok) { emitStateToTable(t); return; }
+    if (!ok) return kickAIAndEmit(t);
 
+    // AI discards if needed
     aiDoDiscardIfNeeded(t);
 
+    // if both complete, begin pegging
     if (t.discardsCount.PLAYER1 === 2 && t.discardsCount.PLAYER2 === 2) {
       beginPegging(t);
     }
 
-    emitStateToTable(t);
-    aiMaybeAct(t);
-    emitStateToTable(t);
+    kickAIAndEmit(t);
   });
 
   // Backwards compatibility: discard_to_crib expects two ids
@@ -824,9 +798,7 @@ io.on("connection", (socket) => {
     aiDoDiscardIfNeeded(t);
     if (t.discardsCount.PLAYER1 === 2 && t.discardsCount.PLAYER2 === 2) beginPegging(t);
 
-    emitStateToTable(t);
-    aiMaybeAct(t);
-    emitStateToTable(t);
+    kickAIAndEmit(t);
   });
 
   socket.on("play_card", ({ cardId } = {}) => {
@@ -834,9 +806,7 @@ io.on("connection", (socket) => {
     if (!t || !p) return;
 
     internalPlayCard(t, p, String(cardId));
-    emitStateToTable(t);
-    aiMaybeAct(t);
-    emitStateToTable(t);
+    kickAIAndEmit(t);
   });
 
   socket.on("go", () => {
@@ -844,28 +814,21 @@ io.on("connection", (socket) => {
     if (!t || !p) return;
 
     internalGo(t, p);
-    emitStateToTable(t);
-    aiMaybeAct(t);
-    emitStateToTable(t);
+    kickAIAndEmit(t);
   });
 
   socket.on("next_hand", () => {
     const { t } = findTableAndPlayerBySocket(socket.id);
     if (!t) return;
 
-    if (t.matchOver) {
-      emitStateToTable(t);
-      return;
-    }
+    if (t.matchOver) return kickAIAndEmit(t);
 
     if (t.gameOver) {
       resetForNewGame(t);
     }
 
     startHandIfPossible(t);
-    emitStateToTable(t);
-    aiMaybeAct(t);
-    emitStateToTable(t);
+    kickAIAndEmit(t);
   });
 
   socket.on("new_match", () => {
@@ -873,9 +836,7 @@ io.on("connection", (socket) => {
     if (!t) return;
     resetForNewMatch(t);
     startHandIfPossible(t);
-    emitStateToTable(t);
-    aiMaybeAct(t);
-    emitStateToTable(t);
+    kickAIAndEmit(t);
   });
 
   socket.on("disconnect", () => {

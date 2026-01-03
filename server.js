@@ -366,19 +366,113 @@ function emitStateToTable(t) {
   }
 }
 
-// ---------- AI ----------
-function aiChooseDiscard(hand6) {
-  // simple: discard two highest cardValue (keeps low cards for pegging)
-  const sorted = [...hand6].sort((a, b) => cardValue(b.rank) - cardValue(a.rank));
-  return [sorted[0], sorted[1]];
+// ---------- AI (smarter) ----------
+function randInt(n) { return (Math.random() * n) | 0; }
+
+function buildRemainingDeckExcluding(cards) {
+  const exclude = new Set(cards.map(c => c.id));
+  return makeDeck().filter(c => !exclude.has(c.id));
 }
 
-function aiChoosePegCard(hand, count) {
-  // simple: play highest value that doesn't exceed 31
+function estimateHandEV(keep4, excluded6, samples = 18) {
+  const remain = buildRemainingDeckExcluding(excluded6);
+  let sum = 0;
+  for (let i = 0; i < samples; i++) {
+    const cut = remain[randInt(remain.length)];
+    sum += scoreHandWithBreakdown(keep4, cut, false).total;
+  }
+  return sum / samples;
+}
+
+function estimateCribEV(discard2, excluded6, isDealer, samples = 12) {
+  // crude but effective: sample random other 2 cards + random cut -> crib score
+  // if dealer: good (positive); if non-dealer: bad (negative)
+  const remain = buildRemainingDeckExcluding(excluded6);
+  let sum = 0;
+
+  for (let i = 0; i < samples; i++) {
+    // pick other 2 distinct
+    const a = remain[randInt(remain.length)];
+    let b = remain[randInt(remain.length)];
+    while (b.id === a.id) b = remain[randInt(remain.length)];
+
+    const cut = remain[randInt(remain.length)];
+    const crib4 = discard2.concat([a, b]);
+    const pts = scoreHandWithBreakdown(crib4, cut, true).total;
+    sum += pts;
+  }
+
+  const avg = sum / samples;
+  return isDealer ? avg : -avg;
+}
+
+function aiChooseDiscardSmart(hand6, isDealer) {
+  // Try all keep-4 combos; pick best EV = handEV + cribEV*(small weight)
+  let best = null;
+  let bestScore = -Infinity;
+
+  const idxs = [0,1,2,3,4,5];
+  const keepCombos = combinations(idxs, 4);
+
+  for (const keepIdxs of keepCombos) {
+    const keep4 = keepIdxs.map(i => hand6[i]);
+    const disc2 = idxs.filter(i => !keepIdxs.includes(i)).map(i => hand6[i]);
+
+    const handEV = estimateHandEV(keep4, hand6, 18);
+    const cribEV = estimateCribEV(disc2, hand6, isDealer, 12);
+
+    // crib is important but not everything
+    const total = handEV + (0.45 * cribEV);
+
+    if (total > bestScore) {
+      bestScore = total;
+      best = { keep4, disc2 };
+    }
+  }
+
+  // fallback
+  if (!best) {
+    const sorted = [...hand6].sort((a, b) => cardValue(b.rank) - cardValue(a.rank));
+    return [sorted[0], sorted[1]];
+  }
+  return best.disc2;
+}
+
+function aiChoosePegCardSmart(hand, count, pile) {
   const playable = hand.filter(c => count + cardValue(c.rank) <= 31);
   if (!playable.length) return null;
-  playable.sort((a, b) => cardValue(b.rank) - cardValue(a.rank));
-  return playable[0];
+
+  let best = null;
+  let bestScore = -Infinity;
+
+  for (const c of playable) {
+    const newCount = count + cardValue(c.rank);
+    const pegNow = scorePegPlay(pile, c, newCount);
+    const pts = pegNow.pts || 0;
+
+    // flexibility after play
+    const remaining = hand.filter(x => x.id !== c.id);
+    const remainingPlayable = remaining.filter(x => newCount + cardValue(x.rank) <= 31).length;
+
+    // prefer leaving "go pressure" on opponent: higher counts near 31 can be good,
+    // but avoid auto-walking into 15/21 patterns is complex; keep heuristic simple.
+    let score = 0;
+    score += pts * 12;                  // immediate points matter a lot
+    score += remainingPlayable * 1.6;   // keep options
+    score += (newCount === 31 ? 2.0 : 0);
+    score += (newCount === 15 ? 1.5 : 0);
+    score += (31 - newCount) * 0.05;    // slight preference to not blow count too early
+
+    // small bias: keep 5s for later unless it scores now
+    if (c.rank === "5" && pts === 0) score -= 0.8;
+
+    if (score > bestScore) {
+      bestScore = score;
+      best = c;
+    }
+  }
+
+  return best || playable[0];
 }
 
 function aiDoDiscardIfNeeded(t) {
@@ -388,14 +482,15 @@ function aiDoDiscardIfNeeded(t) {
   if (t.stage !== "discard") return;
   if (t.discardsCount[ap] >= 2) return;
 
-  // discard 2 cards total
   const needed = 2 - t.discardsCount[ap];
   if (needed <= 0) return;
 
   const hand = t.hands[ap];
   if (hand.length < needed) return;
 
-  const picks = aiChooseDiscard(hand).slice(0, needed);
+  // smarter discard
+  const isDealer = (t.dealer === ap);
+  const picks = aiChooseDiscardSmart(hand, isDealer).slice(0, needed);
   for (const c of picks) {
     internalDiscardOne(t, ap, c.id);
   }
@@ -410,7 +505,6 @@ function aiMaybeAct(t) {
   // AI discard
   if (t.stage === "discard") {
     aiDoDiscardIfNeeded(t);
-    // if now both complete, progress
     if (t.discardsCount.PLAYER1 === 2 && t.discardsCount.PLAYER2 === 2) {
       beginPegging(t);
     }
@@ -420,7 +514,7 @@ function aiMaybeAct(t) {
   // AI pegging
   if (t.stage === "pegging" && t.turn === ap) {
     const count = t.peg.count;
-    const card = aiChoosePegCard(t.pegHands[ap], count);
+    const card = aiChoosePegCardSmart(t.pegHands[ap], count, t.peg.pile);
     if (card) {
       internalPlayCard(t, ap, card.id);
     } else {
@@ -489,7 +583,7 @@ function maybeEndCountAndReset(t) {
   if (!(bothPassed || nobodyCanPlay || t.peg.count === 31)) return false;
 
   // If count hit 31, pile resets automatically; last card points already handled by 31 scoring
-  // If not 31, award 1 point "go / last card" to lastPlayer (if exists)
+  // If not 31, award 1 point "go / last card" to lastPlayer (if any)
   if (t.peg.count !== 31 && t.peg.lastPlayer) {
     t.scores[t.peg.lastPlayer] += 1;
   }
@@ -498,6 +592,7 @@ function maybeEndCountAndReset(t) {
   t.peg.count = 0;
   t.peg.pile = [];
   t.peg.passed = { PLAYER1: false, PLAYER2: false };
+
   // turn becomes player after lastPlayer
   if (t.peg.lastPlayer) t.turn = otherPlayer(t.peg.lastPlayer);
 
@@ -547,7 +642,10 @@ function maybeEndGameOrMatch(t) {
   if (p1 < 121 && p2 < 121) return false;
 
   t.gameOver = true;
-  t.gameWinner = p1 >= 121 && p2 >= 121 ? (p1 >= p2 ? "PLAYER1" : "PLAYER2") : (p1 >= 121 ? "PLAYER1" : "PLAYER2");
+  t.gameWinner =
+    p1 >= 121 && p2 >= 121
+      ? (p1 >= p2 ? "PLAYER1" : "PLAYER2")
+      : (p1 >= 121 ? "PLAYER1" : "PLAYER2");
 
   // best of 3 => first to 2 wins
   t.matchWins[t.gameWinner] += 1;
@@ -596,18 +694,26 @@ function internalPlayCard(t, player, cardId) {
   // if hit 31, reset immediately (no "go" points)
   if (t.peg.count === 31) {
     maybeEndCountAndReset(t);
-    // after reset, continue
   } else {
-    // next turn normally
-    t.turn = otherPlayer(player);
+    // ---- FIX: if opponent has NO cards left, you keep the turn (prevents stall) ----
+    const opp = otherPlayer(player);
+    if (t.pegHands[opp].length === 0) {
+      t.turn = player;
+      // also: treat opponent as "passed" for this count so the end-of-count logic can trigger naturally
+      t.peg.passed[opp] = true;
+    } else {
+      t.turn = opp;
+    }
   }
+
+  // count may need to reset if nobody can play after this card
+  maybeEndCountAndReset(t);
 
   // if both hands empty, go to show
   maybeAdvanceToShow(t);
   // check game end (can end during pegging)
   maybeEndGameOrMatch(t);
 
-  // if after play opponent cannot play but still has cards, they may GO; we wait for explicit go
   return true;
 }
 
@@ -616,7 +722,7 @@ function internalGo(t, player) {
   if (t.turn !== player) return false;
   if (t.gameOver || t.matchOver) return false;
 
-  // Only allow go if truly cannot play
+  // Only allow go if truly cannot play (or you have no cards)
   const hand = t.pegHands[player];
   if (hand.length > 0 && playableExists(hand, t.peg.count)) return false;
 
@@ -650,7 +756,6 @@ io.on("connection", (socket) => {
     if (!t.players.PLAYER1) slot = "PLAYER1";
     else if (!t.players.PLAYER2) slot = "PLAYER2";
     else {
-      // if AI enabled, allow reconnect as PLAYER1 only
       return socket.emit("error_msg", "Table full.");
     }
 
@@ -661,7 +766,6 @@ io.on("connection", (socket) => {
         t.players.PLAYER2 = "AI Captain";
         t.sockets.PLAYER2 = null;
       } else {
-        // if turning AI off, clear P2 slot if it was AI
         if (t.players.PLAYER2 === "AI Captain") {
           t.players.PLAYER2 = null;
           t.sockets.PLAYER2 = null;
@@ -680,7 +784,6 @@ io.on("connection", (socket) => {
       if (t.gameOver) resetForNewGame(t);
       startHandIfPossible(t);
     } else {
-      // human vs human: start if both present
       startHandIfPossible(t);
     }
 
@@ -689,9 +792,8 @@ io.on("connection", (socket) => {
     emitStateToTable(t);
   });
 
-  // Single-card discard (NEW)
+  // Single-card discard
   socket.on("discard_one", ({ cardId } = {}) => {
-    // find which table/player this socket belongs to
     const { t, p } = findTableAndPlayerBySocket(socket.id);
     if (!t || !p) return;
 
@@ -752,12 +854,10 @@ io.on("connection", (socket) => {
     if (!t) return;
 
     if (t.matchOver) {
-      // keep match over until new match
       emitStateToTable(t);
       return;
     }
 
-    // if game ended, reset for next game in match
     if (t.gameOver) {
       resetForNewGame(t);
     }
@@ -779,12 +879,10 @@ io.on("connection", (socket) => {
   });
 
   socket.on("disconnect", () => {
-    // keep names, clear socket association
     for (const t of tables.values()) {
       for (const p of ["PLAYER1", "PLAYER2"]) {
         if (t.sockets[p] === socket.id) {
           t.sockets[p] = null;
-          // if human left and AI not enabled, leave their name
         }
       }
     }

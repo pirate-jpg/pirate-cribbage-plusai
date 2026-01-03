@@ -53,11 +53,13 @@ const ndTotal = el("ndTotal");
 const dTotal = el("dTotal");
 const cTotal = el("cTotal");
 
-// Toast + Modal
+// Toast
 const toast = el("toast");
-const modalOverlay = el("modalOverlay");
-const modalText = el("modalText");
-const modalOk = el("modalOk");
+
+// Sticky GO modal
+const goModal = el("goModal");
+const goModalText = el("goModalText");
+const goModalBtn = el("goModalBtn");
 
 // Join overlay
 const joinOverlay = el("joinOverlay");
@@ -68,7 +70,6 @@ const nameJoinBtn = el("nameJoinBtn");
 
 let state = null;
 let lastGoSeenTs = 0;
-let modalLocked = false;
 
 function cardValue(rank) {
   if (rank === "A") return 1;
@@ -83,6 +84,7 @@ function suitClass(suit) {
 function makeCardButton(card, opts = {}) {
   const btn = document.createElement("button");
   btn.className = `cardBtn ${suitClass(card.suit)}`;
+  if (opts.selected) btn.classList.add("selected");
   if (opts.disabled) btn.disabled = true;
 
   const corner1 = document.createElement("div");
@@ -128,8 +130,10 @@ function playerName(p) {
 
 function renderBoard() {
   if (!state) return;
+
   p1Label.textContent = state.players.PLAYER1 || "P1";
   p2Label.textContent = state.players.PLAYER2 || "P2";
+
   setPegPosition(p1Peg, state.scores.PLAYER1);
   setPegPosition(p2Peg, state.scores.PLAYER2);
 }
@@ -142,19 +146,14 @@ function showToast(msg) {
   showToast._t = setTimeout(() => toast.classList.remove("show"), 2200);
 }
 
-function showModal(msg) {
-  if (!modalOverlay) return;
-  modalLocked = true;
-  modalText.textContent = msg;
-  modalOverlay.classList.remove("hidden");
+function showGoModal(msg) {
+  if (!goModal) return;
+  goModalText.textContent = msg;
+  goModal.classList.remove("hidden");
+  goModalBtn.onclick = () => {
+    goModal.classList.add("hidden");
+  };
 }
-
-function hideModal() {
-  modalLocked = false;
-  modalOverlay.classList.add("hidden");
-}
-
-if (modalOk) modalOk.onclick = hideModal;
 
 function renderPileAndHud() {
   if (!state) return;
@@ -164,7 +163,9 @@ function renderPileAndHud() {
   pileArea.innerHTML = "";
   const pile = state.peg?.pile || [];
   const show = pile.length > 10 ? pile.slice(pile.length - 10) : pile;
-  for (const c of show) pileArea.appendChild(makeCardButton(c, { disabled: true }));
+  for (const c of show) {
+    pileArea.appendChild(makeCardButton(c, { disabled: true }));
+  }
 
   if (state.stage !== "pegging") {
     peggingStatus.textContent = "";
@@ -185,13 +186,19 @@ function renderPileAndHud() {
     lastScore.classList.add("hidden");
   }
 
-  // GO notification: Opponent GO must be acknowledged
+  // GO notification (sticky for opponent only)
   const ge = state.lastGoEvent;
   if (ge && ge.ts && ge.ts !== lastGoSeenTs) {
     lastGoSeenTs = ge.ts;
-    const who = ge.player === state.me ? "You" : "Opponent";
-    if (who === "Opponent") showModal("Opponent said GO");
-    else showToast("You said GO");
+
+    // If opponent said GO: show sticky modal.
+    if (ge.player !== state.me) {
+      const who = playerName(ge.player);
+      showGoModal(`${who} said GO`);
+    } else {
+      // optional: you said go -> small toast only
+      showToast(`You said GO`);
+    }
   }
 }
 
@@ -267,8 +274,10 @@ function render() {
   dealerLine.textContent = `Dealer: ${playerName(state.dealer)}`;
   turnLine.textContent = `Turn: ${playerName(state.turn)}`;
 
+  // Game score with NAMES
   scoreLine.textContent = `${p1} ${state.scores.PLAYER1} • ${p2} ${state.scores.PLAYER2}`;
 
+  // Match score (best of 3)
   const mw1 = state.matchWins?.PLAYER1 ?? 0;
   const mw2 = state.matchWins?.PLAYER2 ?? 0;
   matchLine.textContent = `Match (best of 3): ${p1} ${mw1} • ${p2} ${mw2}`;
@@ -289,9 +298,7 @@ function render() {
 
   handArea.innerHTML = "";
 
-  // prevent clicking cards while a modal is up
-  const clickGuard = (fn) => () => { if (!modalLocked) fn(); };
-
+  // STAGES
   if (state.stage === "lobby") {
     handTitle.textContent = "Waiting for crew…";
     handHelp.textContent = `If this is 2-player, open the same table code on the other device: "${state.tableId}".`;
@@ -304,19 +311,19 @@ function render() {
 
     const cribOwner = playerName(state.dealer);
     handTitle.textContent = "Your Hand";
-    handHelp.textContent = `Tap a card to send it to ${cribOwner}'s crib (send 2 total).`;
+    handHelp.textContent = `Click a card to send it to ${cribOwner}'s crib (send 2 total).`;
 
     const myHand = state.myHand || [];
     myHand.forEach(card => {
       const btn = makeCardButton(card, {
-        onClick: clickGuard(() => {
+        onClick: () => {
           socket.emit("discard_one", { cardId: card.id });
-          showToast("Sent to crib");
-        })
+        }
       });
       handArea.appendChild(btn);
     });
 
+    discardBtn.style.display = "none";
     return;
   }
 
@@ -332,8 +339,8 @@ function render() {
     myHand.forEach(card => {
       const playable = myTurn && (count + cardValue(card.rank) <= 31);
       const btn = makeCardButton(card, {
-        disabled: !playable || modalLocked,
-        onClick: clickGuard(() => socket.emit("play_card", { cardId: card.id }))
+        disabled: !playable,
+        onClick: () => socket.emit("play_card", { cardId: card.id })
       });
       handArea.appendChild(btn);
     });
@@ -341,28 +348,24 @@ function render() {
     const canPlay = myHand.some(c => count + cardValue(c.rank) <= 31);
     if (myTurn && myHand.length > 0 && !canPlay) {
       goBtn.style.display = "inline-block";
-      goBtn.onclick = clickGuard(() => socket.emit("go"));
+      goBtn.onclick = () => socket.emit("go");
     }
     return;
   }
 
   if (state.stage === "show") {
     handTitle.textContent = "Show";
+    handHelp.textContent = state.gameOver
+      ? `${playerName(state.gameWinner)} won this game. Click Next Hand when you’re ready.`
+      : "Review scoring. Click Next Hand when ready.";
+
+    nextHandBtn.style.display = "inline-block";
+    nextHandBtn.onclick = () => socket.emit("next_hand");
 
     if (state.matchOver) {
-      handHelp.textContent = `${playerName(state.matchWinner)} wins the match (best of 3).`;
       newMatchBtn.style.display = "inline-block";
-      newMatchBtn.onclick = clickGuard(() => socket.emit("new_match"));
-    } else if (state.gameOver) {
-      handHelp.textContent = `${playerName(state.gameWinner)} won this game. Tap Continue when ready.`;
-      nextHandBtn.style.display = "inline-block";
-      nextHandBtn.textContent = "Continue";
-      nextHandBtn.onclick = clickGuard(() => socket.emit("next_hand"));
-    } else {
-      handHelp.textContent = "Review scoring. Tap Continue when ready.";
-      nextHandBtn.style.display = "inline-block";
-      nextHandBtn.textContent = "Continue";
-      nextHandBtn.onclick = clickGuard(() => socket.emit("next_hand"));
+      newMatchBtn.onclick = () => socket.emit("new_match");
+      handHelp.textContent = `${playerName(state.matchWinner)} wins the match (best of 3).`;
     }
 
     const myHand = state.myHand || [];
@@ -395,6 +398,10 @@ function doJoin() {
 nameJoinBtn.onclick = doJoin;
 nameInput.addEventListener("keydown", (e)=>{ if (e.key === "Enter") doJoin(); });
 tableInput.addEventListener("keydown", (e)=>{ if (e.key === "Enter") doJoin(); });
+
+socket.on("connect", () => {
+  // idle until Set Sail
+});
 
 socket.on("state", (s) => {
   state = s;

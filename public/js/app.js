@@ -53,23 +53,21 @@ const ndTotal = el("ndTotal");
 const dTotal = el("dTotal");
 const cTotal = el("cTotal");
 
-// Toast
+// Toast (non-sticky)
 const toast = el("toast");
 
-// Sticky GO modal
-const goModal = el("goModal");
-const goModalText = el("goModalText");
-const goModalBtn = el("goModalBtn");
-
-// Join overlay
-const joinOverlay = el("joinOverlay");
-const nameInput = el("nameInput");
-const tableInput = el("tableInput");
-const vsAiInput = el("vsAiInput");
-const nameJoinBtn = el("nameJoinBtn");
+// Sticky modal
+const modalOverlay = el("modalOverlay");
+const modalTitle = el("modalTitle");
+const modalText = el("modalText");
+const modalOkBtn = el("modalOkBtn");
 
 let state = null;
 let lastGoSeenTs = 0;
+
+// Game-over popup gating
+let lastGameSeqSeen = 0;
+let gameOverAckForSeq = 0;
 
 function cardValue(rank) {
   if (rank === "A") return 1;
@@ -146,13 +144,18 @@ function showToast(msg) {
   showToast._t = setTimeout(() => toast.classList.remove("show"), 2200);
 }
 
-function showGoModal(msg) {
-  if (!goModal) return;
-  goModalText.textContent = msg;
-  goModal.classList.remove("hidden");
-  goModalBtn.onclick = () => {
-    goModal.classList.add("hidden");
+function showModal(title, text, onOk) {
+  modalTitle.textContent = title || "Ahoy!";
+  modalText.textContent = text || "";
+  modalOverlay.classList.remove("hidden");
+  modalOkBtn.onclick = () => {
+    modalOverlay.classList.add("hidden");
+    if (typeof onOk === "function") onOk();
   };
+}
+
+function isModalOpen() {
+  return !modalOverlay.classList.contains("hidden");
 }
 
 function renderPileAndHud() {
@@ -186,18 +189,14 @@ function renderPileAndHud() {
     lastScore.classList.add("hidden");
   }
 
-  // GO notification (sticky for opponent only)
+  // STICKY GO notification (only when opponent says GO)
   const ge = state.lastGoEvent;
   if (ge && ge.ts && ge.ts !== lastGoSeenTs) {
     lastGoSeenTs = ge.ts;
 
-    // If opponent said GO: show sticky modal.
+    // only pop for opponent / AI (per your preference)
     if (ge.player !== state.me) {
-      const who = playerName(ge.player);
-      showGoModal(`${who} said GO`);
-    } else {
-      // optional: you said go -> small toast only
-      showToast(`You said GO`);
+      showModal("GO!", `${playerName(ge.player)} can’t play. Your move.`, () => {});
     }
   }
 }
@@ -260,6 +259,30 @@ function renderShow() {
   cTotal.textContent = `Total: ${cr.breakdown.total}`;
 }
 
+function maybeShowGameOverModalOnce() {
+  if (!state) return;
+  if (!state.gameOver) return;
+
+  const seq = state.gameSeq || 0;
+
+  // show once per gameSeq
+  if (seq !== 0 && seq !== lastGameSeqSeen) {
+    lastGameSeqSeen = seq;
+
+    const winner = playerName(state.gameWinner);
+    const youWon = (state.gameWinner === state.me);
+
+    // require acknowledgement before next hand
+    gameOverAckForSeq = 0;
+
+    showModal(
+      "Game Over",
+      youWon ? `🏴‍☠️ You won! (${winner})` : `☠️ ${winner} won this one.`,
+      () => { gameOverAckForSeq = seq; }
+    );
+  }
+}
+
 function render() {
   if (!state) return;
 
@@ -274,10 +297,8 @@ function render() {
   dealerLine.textContent = `Dealer: ${playerName(state.dealer)}`;
   turnLine.textContent = `Turn: ${playerName(state.turn)}`;
 
-  // Game score with NAMES
   scoreLine.textContent = `${p1} ${state.scores.PLAYER1} • ${p2} ${state.scores.PLAYER2}`;
 
-  // Match score (best of 3)
   const mw1 = state.matchWins?.PLAYER1 ?? 0;
   const mw2 = state.matchWins?.PLAYER2 ?? 0;
   matchLine.textContent = `Match (best of 3): ${p1} ${mw1} • ${p2} ${mw2}`;
@@ -311,13 +332,14 @@ function render() {
 
     const cribOwner = playerName(state.dealer);
     handTitle.textContent = "Your Hand";
-    handHelp.textContent = `Click a card to send it to ${cribOwner}'s crib (send 2 total).`;
+    handHelp.textContent = `Tap a card to send it to ${cribOwner}'s crib (send 2 total).`;
 
     const myHand = state.myHand || [];
     myHand.forEach(card => {
       const btn = makeCardButton(card, {
         onClick: () => {
           socket.emit("discard_one", { cardId: card.id });
+          showToast("Sent to crib");
         }
       });
       handArea.appendChild(btn);
@@ -356,11 +378,21 @@ function render() {
   if (state.stage === "show") {
     handTitle.textContent = "Show";
     handHelp.textContent = state.gameOver
-      ? `${playerName(state.gameWinner)} won this game. Click Next Hand when you’re ready.`
+      ? `${playerName(state.gameWinner)} won this game.`
       : "Review scoring. Click Next Hand when ready.";
 
     nextHandBtn.style.display = "inline-block";
-    nextHandBtn.onclick = () => socket.emit("next_hand");
+    nextHandBtn.onclick = () => {
+      // If game over, require you to acknowledge the modal before moving on
+      if (state.gameOver) {
+        const seq = state.gameSeq || 0;
+        if (gameOverAckForSeq !== seq) {
+          showModal("Game Over", "Acknowledge the result first, Captain.", () => { gameOverAckForSeq = seq; });
+          return;
+        }
+      }
+      socket.emit("next_hand");
+    };
 
     if (state.matchOver) {
       newMatchBtn.style.display = "inline-block";
@@ -371,6 +403,10 @@ function render() {
     const myHand = state.myHand || [];
     myHand.forEach(card => handArea.appendChild(makeCardButton(card, { disabled: true })));
     if (state.cut) handArea.appendChild(makeCardButton(state.cut, { disabled: true }));
+
+    // pop game over modal once per game
+    maybeShowGameOverModalOnce();
+
     return;
   }
 }
@@ -385,6 +421,13 @@ function doJoin() {
   socket.emit("join_table", { tableId, name, vsAI });
   joinOverlay.style.display = "none";
 }
+
+// Join overlay elements
+const joinOverlay = el("joinOverlay");
+const nameInput = el("nameInput");
+const tableInput = el("tableInput");
+const vsAiInput = el("vsAiInput");
+const nameJoinBtn = el("nameJoinBtn");
 
 // Pre-fill from URL if present
 (function initJoinDefaults(){
@@ -405,6 +448,8 @@ socket.on("connect", () => {
 
 socket.on("state", (s) => {
   state = s;
+
+  // If a modal is up, we still render (so board updates), but we keep the modal.
   render();
 });
 

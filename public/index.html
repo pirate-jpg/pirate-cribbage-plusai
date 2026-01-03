@@ -1,3 +1,4 @@
+<!-- public/index.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -8,15 +9,15 @@
 </head>
 
 <body>
-  <!-- TOAST (non-sticky quick notifications, NOT GO anymore) -->
+  <!-- TOAST (non-sticky) -->
   <div id="toast" class="toast"></div>
 
-  <!-- STICKY MODAL (GO / GAME OVER) -->
+  <!-- STICKY MODAL (for opponent GO) -->
   <div id="modalOverlay" class="modalOverlay hidden">
     <div class="modalCard">
-      <div id="modalTitle" class="modalTitle">—</div>
+      <div id="modalTitle" class="modalTitle">Message</div>
       <div id="modalText" class="modalText">—</div>
-      <button id="modalOkBtn" class="btn primary big">Aye</button>
+      <button id="modalBtn" class="btn primary big">Aye</button>
     </div>
   </div>
 

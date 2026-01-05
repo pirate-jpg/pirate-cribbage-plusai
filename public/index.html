@@ -8,7 +8,7 @@
 </head>
 
 <body>
-  <!-- TOAST (kept for non-critical notices) -->
+  <!-- TOAST -->
   <div id="toast" class="toast"></div>
 
   <!-- GO MODAL (sticky + must dismiss) -->
@@ -32,67 +32,71 @@
     </div>
   </div>
 
-  <!-- JOIN OVERLAY -->
+  <!-- JOIN OVERLAY (Option A: mode select then fields) -->
   <div id="joinOverlay" class="overlay">
     <div class="panel overlayCard">
+      <h2 class="overlayTitle">🏴‍☠️ Set Sail</h2>
+      <p id="joinSubtitle" class="overlayText">Choose a mode to start.</p>
 
-      <!-- MODE CHOICE (Option A) -->
-      <div id="modeScreen">
-        <h2 class="overlayTitle">🏴‍☠️ Set Sail</h2>
-        <p class="overlayText">Choose a mode to begin.</p>
-
+      <!-- STEP 1: MODE SELECT -->
+      <div id="modeStep">
         <button id="modeAiBtn" class="btn primary big" style="width:100%;">Play vs AI</button>
         <div style="height:12px;"></div>
         <button id="modePvpBtn" class="btn primary big" style="width:100%;">Play vs Player</button>
 
         <div class="overlayHint" style="margin-top:12px;">
-          vs AI: just your name<br>
-          vs Player: name + shared table code
+          vs AI: just your name • vs Player: name + shared table code
         </div>
       </div>
 
-      <!-- JOIN FORM (re-uses your existing inputs/IDs so the rest of the app stays intact) -->
-      <div id="joinFormScreen" class="hidden">
-        <h2 id="joinFormTitle" class="overlayTitle">—</h2>
-        <p id="joinFormText" class="overlayText">—</p>
+      <!-- STEP 2: FIELDS -->
+      <div id="fieldsStep" style="display:none;">
+        <!-- Wrap in a form; keep Safari from autofilling -->
+        <form id="joinForm" autocomplete="off" autocapitalize="off">
+          <!-- Decoy fields (helps defeat iOS/Safari autofill) -->
+          <input style="position:absolute;left:-9999px;top:-9999px" type="text" name="username" autocomplete="username">
+          <input style="position:absolute;left:-9999px;top:-9999px" type="password" name="password" autocomplete="current-password">
 
-        <div class="overlayRow" id="nameRow">
-          <div class="overlayLabel">Your name</div>
-          <input
-            id="nameInput"
-            class="nameInput"
-            maxlength="16"
-            placeholder="Name"
-            autocomplete="off"
-            autocorrect="off"
-            spellcheck="false"
-          />
-        </div>
+          <div class="overlayRow">
+            <div class="overlayLabel">Your name</div>
+            <input
+              id="nameInput"
+              class="nameInput"
+              maxlength="16"
+              placeholder="Name"
+              inputmode="text"
+              autocomplete="off"
+              autocorrect="off"
+              autocapitalize="words"
+              spellcheck="false"
+            />
+          </div>
 
-        <div class="overlayRow" id="tableRow">
-          <div class="overlayLabel">Table code</div>
-          <input
-            id="tableInput"
-            class="nameInput"
-            maxlength="24"
-            placeholder="Table code"
-            autocomplete="off"
-            autocorrect="off"
-            autocapitalize="characters"
-            spellcheck="false"
-          />
-        </div>
+          <div id="tableRow" class="overlayRow">
+            <div class="overlayLabel">Table code</div>
+            <input
+              id="tableInput"
+              class="nameInput"
+              maxlength="24"
+              placeholder="Table code"
+              inputmode="text"
+              autocomplete="off"
+              autocorrect="off"
+              autocapitalize="characters"
+              spellcheck="false"
+            />
+            <div class="overlayHint" style="margin-top:8px;">
+              One player chooses a table code — the other player must enter the exact same code.
+            </div>
+          </div>
 
-        <!-- keep checkbox in DOM for compatibility, but hidden -->
-        <input id="vsAiInput" type="checkbox" style="display:none;" />
+          <button id="setSailBtn" type="submit" class="btn primary big" style="width:100%; margin-top:10px;">Set Sail</button>
+        </form>
 
-        <button id="nameJoinBtn" class="btn primary big">Set Sail</button>
+        <div id="modeHint" class="overlayHint" style="margin-top:10px;"></div>
 
-        <div id="joinHint" class="overlayHint">—</div>
-
-        <button id="joinBackBtn" class="btn primary" style="margin-top:10px; width:100%;">Back</button>
+        <button id="backBtn" class="btn primary big" style="width:100%; margin-top:10px;">Back</button>
       </div>
-
     </div>
   </div>
 
@@ -190,9 +194,6 @@
         </div>
 
         <div class="handBlock">
-          <!-- ✅ NEW: label inside the hand panel -->
-          <div id="yourHandLabel" class="mutedSmall" style="margin: 4px 0 8px 2px; display:none;">Your hand</div>
-
           <div class="actionRow">
             <button id="discardBtn" class="btn primary" style="display:none;">Send to Crib</button>
             <button id="goBtn" class="btn go" style="display:none;">GO</button>
@@ -240,6 +241,7 @@
   </main>
 
   <script src="/socket.io/socket.io.js"></script>
-  <script src="/js/app.js"></script>
+  <!-- cache-bust to reduce “I swear I deployed it” pain -->
+  <script src="/js/app.js?v=1"></script>
 </body>
 </html>

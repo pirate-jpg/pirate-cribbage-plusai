@@ -59,12 +59,6 @@ const toast = el("toast");
 
 // Join overlay
 const joinOverlay = el("joinOverlay");
-const nameInput = el("nameInput");
-const tableInput = el("tableInput");
-const nameJoinBtn = el("nameJoinBtn");
-
-// New mode UI IDs (from index.html)
-const joinForm = el("joinForm");
 const joinTopHelp = el("joinTopHelp");
 const modePanel = el("modePanel");
 const entryPanel = el("entryPanel");
@@ -72,7 +66,12 @@ const modeAiBtn = el("modeAiBtn");
 const modePvpBtn = el("modePvpBtn");
 const backBtn = el("backBtn");
 const entryHint = el("entryHint");
+const joinForm = el("joinForm");
+
+const nameInput = el("nameInput");
+const tableInput = el("tableInput");
 const tableRow = el("tableRow");
+const nameJoinBtn = el("nameJoinBtn");
 
 // GO modal
 const goModal = el("goModal");
@@ -87,7 +86,9 @@ const gameModalNewMatch = el("gameModalNewMatch");
 
 let state = null;
 let lastGoSeenTs = 0;
-let lastGameOverShownKey = ""; // prevents re-showing modal on every state emit
+let lastGameOverShownKey = "";
+
+let selectedMode = null; // "ai" | "pvp"
 
 function cardValue(rank) {
   if (rank === "A") return 1;
@@ -151,11 +152,11 @@ function playerName(p) {
 function renderBoard() {
   if (!state) return;
 
-  if (p1Label) p1Label.textContent = state.players.PLAYER1 || "P1";
-  if (p2Label) p2Label.textContent = state.players.PLAYER2 || "P2";
+  p1Label.textContent = state.players.PLAYER1 || "P1";
+  p2Label.textContent = state.players.PLAYER2 || "P2";
 
-  if (p1Peg) setPegPosition(p1Peg, state.scores.PLAYER1);
-  if (p2Peg) setPegPosition(p2Peg, state.scores.PLAYER2);
+  setPegPosition(p1Peg, state.scores.PLAYER1);
+  setPegPosition(p2Peg, state.scores.PLAYER2);
 }
 
 function showToast(msg) {
@@ -187,8 +188,7 @@ function maybeShowGoModal() {
   // Only show if opponent said GO
   if (ge.player === state.me) return;
 
-  const who = ge.player === state.me ? "You" : "Opponent";
-  if (goModalText) goModalText.textContent = `${who} said GO`;
+  goModalText.textContent = `Opponent said GO`;
   showModal(goModal);
 }
 
@@ -205,17 +205,15 @@ function maybeShowGameOverModal() {
   lastGameOverShownKey = key;
 
   const winnerName = playerName(state.gameWinner);
-  if (gameModalText) {
-    if (state.matchOver) {
-      const matchWinnerName = playerName(state.matchWinner);
-      gameModalText.textContent = `${winnerName} won this game.\n\n${matchWinnerName} wins the match (best of 3).`;
-      if (gameModalNewMatch) gameModalNewMatch.style.display = "inline-block";
-      if (gameModalNext) gameModalNext.textContent = "Next Game";
-    } else {
-      gameModalText.textContent = `${winnerName} won this game.\n\nPress Next Game when you’re ready.`;
-      if (gameModalNewMatch) gameModalNewMatch.style.display = "none";
-      if (gameModalNext) gameModalNext.textContent = "Next Game";
-    }
+  if (state.matchOver) {
+    const matchWinnerName = playerName(state.matchWinner);
+    gameModalText.textContent = `${winnerName} won this game.\n\n${matchWinnerName} wins the match (best of 3).`;
+    gameModalNewMatch.style.display = "inline-block";
+    gameModalNext.textContent = "Next Game";
+  } else {
+    gameModalText.textContent = `${winnerName} won this game.\n\nPress Next Game when you’re ready.`;
+    gameModalNewMatch.style.display = "none";
+    gameModalNext.textContent = "Next Game";
   }
 
   showModal(gameModal);
@@ -235,8 +233,6 @@ if (gameModalNewMatch) {
 }
 
 function clearPeggingPanelsForShowOrNonPegging() {
-  // Clears the "Cards played (this count)" area and last-score line
-  // when not actively pegging (includes end-of-hand show).
   if (pileArea) pileArea.innerHTML = "";
   if (peggingStatus) peggingStatus.textContent = "";
   if (lastScore) lastScore.classList.add("hidden");
@@ -281,7 +277,6 @@ function renderPileAndHud() {
 }
 
 function renderBreakdown(listEl, breakdown) {
-  if (!listEl) return;
   listEl.innerHTML = "";
   if (!breakdown || !breakdown.items || breakdown.items.length === 0) {
     const li = document.createElement("li");
@@ -321,20 +316,14 @@ function renderShow() {
   const de = state.show.hand[dealer];
   const cr = state.show.crib;
 
-  if (ndCards) {
-    for (const c of nd.cards) ndCards.appendChild(makeCardButton(c, { disabled: true }));
-    ndCards.appendChild(makeCardButton(cut, { disabled: true }));
-  }
+  for (const c of nd.cards) ndCards.appendChild(makeCardButton(c, { disabled: true }));
+  ndCards.appendChild(makeCardButton(cut, { disabled: true }));
 
-  if (dCards) {
-    for (const c of de.cards) dCards.appendChild(makeCardButton(c, { disabled: true }));
-    dCards.appendChild(makeCardButton(cut, { disabled: true }));
-  }
+  for (const c of de.cards) dCards.appendChild(makeCardButton(c, { disabled: true }));
+  dCards.appendChild(makeCardButton(cut, { disabled: true }));
 
-  if (cCards) {
-    for (const c of cr.cards) cCards.appendChild(makeCardButton(c, { disabled: true }));
-    cCards.appendChild(makeCardButton(cut, { disabled: true }));
-  }
+  for (const c of cr.cards) cCards.appendChild(makeCardButton(c, { disabled: true }));
+  cCards.appendChild(makeCardButton(cut, { disabled: true }));
 
   renderBreakdown(ndBreak, nd.breakdown);
   renderBreakdown(dBreak, de.breakdown);
@@ -353,7 +342,7 @@ function setNextHandProminence(on) {
     nextHandBtn.style.padding = "14px 20px";
     nextHandBtn.style.fontWeight = "800";
     nextHandBtn.style.borderRadius = "14px";
-    nextHandBtn.style.minWidth = "190px";
+    nextHandBtn.style.minWidth = "170px";
   } else {
     nextHandBtn.style.fontSize = "";
     nextHandBtn.style.padding = "";
@@ -393,7 +382,7 @@ function render() {
   renderPileAndHud();
   renderShow();
 
-  // buttons defaults
+  // buttons reset
   if (discardBtn) discardBtn.style.display = "none";
   if (goBtn) goBtn.style.display = "none";
   if (nextHandBtn) nextHandBtn.style.display = "none";
@@ -407,8 +396,8 @@ function render() {
   if (state.stage === "lobby") {
     if (handTitle) handTitle.textContent = "Waiting for crew…";
     if (handHelp) handHelp.textContent = `If this is 2-player, open the same table code on the other device: "${state.tableId}".`;
-    if (handBlockLabel) handBlockLabel.textContent = "";
     if (showPanel) showPanel.classList.add("hidden");
+    if (handBlockLabel) handBlockLabel.textContent = "";
     return;
   }
 
@@ -417,7 +406,7 @@ function render() {
 
     const cribOwner = playerName(state.dealer);
     if (handTitle) handTitle.textContent = "Discard";
-    if (handHelp) handHelp.textContent = `Tap 2 cards to send to ${cribOwner}'s crib.`;
+    if (handHelp) handHelp.textContent = `Click a card to send it to ${cribOwner}'s crib (send 2 total).`;
     if (handBlockLabel) handBlockLabel.textContent = "Your hand";
 
     const myHand = state.myHand || [];
@@ -474,9 +463,10 @@ function render() {
         ? `${playerName(state.gameWinner)} won this game.`
         : "See scoring below.";
     }
+
     if (handBlockLabel) handBlockLabel.textContent = "";
 
-    // Next Hand button more prominent
+    // Next Hand prominent
     if (nextHandBtn) {
       nextHandBtn.style.display = "inline-block";
       setNextHandProminence(true);
@@ -489,7 +479,7 @@ function render() {
       if (handHelp) handHelp.textContent = `${playerName(state.matchWinner)} wins the match (best of 3).`;
     }
 
-    // Clear handArea and show message instead
+    // Clear handArea and show message
     if (handArea) {
       handArea.innerHTML = "";
       const msg = document.createElement("div");
@@ -504,19 +494,9 @@ function render() {
   }
 }
 
-// ===== JOIN FLOW (matches index.html mode UI) =====
-let joinMode = null; // "ai" | "pvp"
-
-function showModeChooser() {
-  joinMode = null;
-  if (modePanel) modePanel.style.display = "block";
-  if (entryPanel) entryPanel.style.display = "none";
-  if (joinTopHelp) joinTopHelp.textContent = "Choose a mode, then enter what's needed to start.";
-}
-
+// ---------- JOIN FLOW (mode chooser) ----------
 function showEntry(mode) {
-  joinMode = mode;
-
+  selectedMode = mode; // "ai" or "pvp"
   if (modePanel) modePanel.style.display = "none";
   if (entryPanel) entryPanel.style.display = "block";
 
@@ -526,47 +506,51 @@ function showEntry(mode) {
     if (tableRow) tableRow.style.display = "none";
     if (tableInput) tableInput.value = "";
   } else {
-    if (joinTopHelp) joinTopHelp.textContent = "VS Player: enter your name + a table code. Player 2 must enter the same table code.";
-    if (entryHint) entryHint.textContent = "Tip: both players must use the exact same table code.";
+    if (joinTopHelp) joinTopHelp.textContent = "VS Player: enter your name + a table code.\nPlayer 2 must enter the same table code.";
+    if (entryHint) entryHint.textContent = "Tip: Use the same table code on another device for 2-player.";
     if (tableRow) tableRow.style.display = "block";
   }
 
-  setTimeout(() => nameInput?.focus(), 50);
+  if (nameInput) {
+    nameInput.value = "";
+    nameInput.focus();
+  }
+  if (tableInput && mode === "pvp") tableInput.value = "";
 }
 
-function doJoin() {
-  const name = (nameInput?.value || "").trim().slice(0, 16);
-  const tableIdRaw = (tableInput?.value || "").trim().slice(0, 24);
-
-  if (!joinMode) {
-    showToast("Choose a mode first.");
-    return;
-  }
-  if (!name) {
-    alert("Enter a name.");
-    nameInput?.focus();
-    return;
-  }
-
-  const vsAI = (joinMode === "ai");
-  const tableId = vsAI ? "" : tableIdRaw;
-
-  if (!vsAI && !tableId) {
-    alert("Enter a table code.");
-    tableInput?.focus();
-    return;
-  }
-
-  socket.emit("join_table", { tableId, name, vsAI });
-
-  if (joinOverlay) joinOverlay.style.display = "none";
+function showModeChooser() {
+  selectedMode = null;
+  if (entryPanel) entryPanel.style.display = "none";
+  if (modePanel) modePanel.style.display = "block";
+  if (joinTopHelp) joinTopHelp.textContent = "Choose a mode, then enter what's needed to start.";
+  if (entryHint) entryHint.textContent = "";
 }
 
 if (modeAiBtn) modeAiBtn.onclick = () => showEntry("ai");
 if (modePvpBtn) modePvpBtn.onclick = () => showEntry("pvp");
 if (backBtn) backBtn.onclick = () => showModeChooser();
 
-// IMPORTANT: prevent submit reload
+function doJoin() {
+  const name = (nameInput?.value || "").trim().slice(0, 16);
+  const tableId = (tableInput?.value || "").trim().slice(0, 24);
+
+  if (!name) { alert("Enter a name."); return; }
+
+  if (selectedMode === "pvp") {
+    if (!tableId) { alert("Enter a table code."); return; }
+    socket.emit("join_table", { tableId, name, vsAI: false });
+  } else if (selectedMode === "ai") {
+    // allow empty tableId; server can assign/derive
+    socket.emit("join_table", { tableId: "", name, vsAI: true });
+  } else {
+    alert("Choose a mode first.");
+    return;
+  }
+
+  if (joinOverlay) joinOverlay.style.display = "none";
+}
+
+// IMPORTANT: prevent form submit refresh (this is often the “stall”)
 if (joinForm) {
   joinForm.addEventListener("submit", (e) => {
     e.preventDefault();
@@ -574,8 +558,8 @@ if (joinForm) {
   });
 }
 
-// Backup wiring (in case someone clicks the Set Sail button directly)
 if (nameJoinBtn) nameJoinBtn.onclick = (e) => {
+  // in case browser triggers click before submit handler
   e?.preventDefault?.();
   doJoin();
 };
@@ -583,14 +567,9 @@ if (nameJoinBtn) nameJoinBtn.onclick = (e) => {
 if (nameInput) nameInput.addEventListener("keydown", (e)=>{ if (e.key === "Enter") doJoin(); });
 if (tableInput) tableInput.addEventListener("keydown", (e)=>{ if (e.key === "Enter") doJoin(); });
 
-showModeChooser();
-
 socket.on("state", (s) => {
   state = s;
   render();
 });
 
-socket.on("error_msg", (msg) => {
-  if (joinOverlay) joinOverlay.style.display = "block";
-  showToast(msg);
-});
+socket.on("error_msg", (msg) => alert(msg));

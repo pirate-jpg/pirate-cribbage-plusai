@@ -38,9 +38,8 @@ function otherPlayer(p) {
   return p === "PLAYER1" ? "PLAYER2" : "PLAYER1";
 }
 
-function makeRoomCode(prefix = "T") {
-  const s = Math.random().toString(36).slice(2, 8).toUpperCase();
-  return `${prefix}${s}`.slice(0, 24);
+function clamp(n, min, max) {
+  return Math.max(min, Math.min(max, n));
 }
 
 // ---------- Cards / Deck ----------
@@ -173,7 +172,7 @@ function scoreHandWithBreakdown(hand4, cut, isCrib = false) {
   return { items, total };
 }
 
-// Pegging scoring (15/31, pairs, runs)
+// Pegging scoring (15/31, pairs, runs, last card handled elsewhere)
 function scorePegPlay(pile, newCard, newCount) {
   const reasons = [];
   let pts = 0;
@@ -215,7 +214,7 @@ function scorePegPlay(pile, newCard, newCount) {
 function makeTable(tableId) {
   return {
     tableId,
-    ai: { enabled: false, aiPlayer: "PLAYER2" },
+    ai: { enabled: false, aiPlayer: "PLAYER2" }, // default AI is PLAYER2
     stage: "lobby",
     dealer: "PLAYER1",
     turn: "PLAYER1",
@@ -230,8 +229,8 @@ function makeTable(tableId) {
     discardsCount: { PLAYER1: 0, PLAYER2: 0 },
 
     deck: [],
-    hands: { PLAYER1: [], PLAYER2: [] },
-    pegHands: { PLAYER1: [], PLAYER2: [] },
+    hands: { PLAYER1: [], PLAYER2: [] },      // keep for show
+    pegHands: { PLAYER1: [], PLAYER2: [] },   // consumed in pegging
     crib: [],
     cut: null,
 
@@ -244,6 +243,7 @@ function makeTable(tableId) {
 
     lastPegEvent: null,
     lastGoEvent: null,
+
     show: null,
   };
 }
@@ -269,6 +269,7 @@ function resetForNewGame(t) {
 
   t.peg = { count: 0, pile: [], passed: { PLAYER1: false, PLAYER2: false }, lastPlayer: null };
 
+  // alternate dealer for fairness
   t.dealer = otherPlayer(t.dealer);
   t.turn = t.dealer;
 
@@ -347,7 +348,10 @@ function emitStateToTable(t) {
     sock.emit("state", {
       ...base,
       me: p,
-      myHand: t.stage === "pegging" ? t.pegHands[p] : t.hands[p],
+      myHand:
+        t.stage === "pegging"
+          ? t.pegHands[p]
+          : t.hands[p],
     });
   }
 }
@@ -602,48 +606,88 @@ function internalGo(t, player) {
   t.turn = otherPlayer(player);
 
   maybeEndCountAndReset(t);
+
   maybeAdvanceToShow(t);
   maybeEndGameOrMatch(t);
 
   return true;
 }
 
+// ---------- NEW HELPERS FOR JOIN FIXES ----------
+function normalizeTableId(raw) {
+  return String(raw || "").trim().slice(0, 24);
+}
+
+function normalizeName(raw) {
+  return String(raw || "").trim().slice(0, 16);
+}
+
+function makeAiTableId() {
+  // Unique enough for practical use; avoids everyone landing in JIM1.
+  return `AI-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`.slice(0, 24);
+}
+
+function seatForRejoin(t, nm) {
+  // If this name already owns a seat AND that seat has no active socket, reclaim it.
+  if (t.players.PLAYER1 === nm && !t.sockets.PLAYER1) return "PLAYER1";
+  if (t.players.PLAYER2 === nm && !t.sockets.PLAYER2) return "PLAYER2";
+  return null;
+}
+
+function firstOpenSeatByName(t) {
+  if (!t.players.PLAYER1) return "PLAYER1";
+  if (!t.players.PLAYER2) return "PLAYER2";
+  return null;
+}
+
 // ---------- socket.io ----------
 io.on("connection", (socket) => {
   socket.on("join_table", ({ tableId, name, vsAI } = {}) => {
-    const nm = String(name || "").trim().slice(0, 16);
-    if (!nm) return socket.emit("error_msg", "Enter a name.");
-
+    const nm = normalizeName(name);
     const wantsAI = !!vsAI;
 
-    // vs AI: tableId not required; generate one if missing.
-    // vs Player: tableId required (client enforces); server keeps a legacy fallback.
-    let tid = String(tableId || "").trim().slice(0, 24);
+    if (!nm) return socket.emit("error_msg", "Enter a name.");
 
-    if (wantsAI) {
-      if (!tid) tid = makeRoomCode("AI-");
-    } else {
-      if (!tid) tid = "JIM1"; // legacy fallback only
+    // AI mode: ignore any provided tableId and create a unique table per session.
+    // This prevents everyone from piling into JIM1 and hitting "table full".
+    const tid = wantsAI ? makeAiTableId() : normalizeTableId(tableId);
+
+    if (!wantsAI && !tid) {
+      return socket.emit("error_msg", "Enter a table code.");
     }
 
     const t = getOrCreateTable(tid);
 
-    let slot = null;
-    if (!t.players.PLAYER1) slot = "PLAYER1";
-    else if (!t.players.PLAYER2) slot = "PLAYER2";
-    else return socket.emit("error_msg", "Table full.");
-
-    if (slot === "PLAYER1") {
-      t.ai.enabled = wantsAI;
-      if (t.ai.enabled) {
-        t.players.PLAYER2 = "AI Captain";
+    // Configure AI if requested (AI tables are always AI-enabled)
+    if (wantsAI) {
+      t.ai.enabled = true;
+      t.players.PLAYER2 = "AI Captain";
+      t.sockets.PLAYER2 = null;
+    } else {
+      // non-AI tables
+      t.ai.enabled = false;
+      if (t.players.PLAYER2 === "AI Captain") {
+        t.players.PLAYER2 = null;
         t.sockets.PLAYER2 = null;
-      } else {
-        if (t.players.PLAYER2 === "AI Captain") {
-          t.players.PLAYER2 = null;
-          t.sockets.PLAYER2 = null;
-        }
       }
+    }
+
+    // Seat selection:
+    // 1) Rejoin: if your name matches an existing seat and its socket is null, reclaim it.
+    // 2) Otherwise: first open empty-name seat.
+    let slot = seatForRejoin(t, nm);
+    if (!slot) slot = firstOpenSeatByName(t);
+
+    // AI tables: force player into PLAYER1 always (since PLAYER2 is AI).
+    if (wantsAI) slot = "PLAYER1";
+
+    if (!slot) {
+      return socket.emit("error_msg", "Table full.");
+    }
+
+    // If this is AI mode, ensure PLAYER2 is AI and cannot be taken.
+    if (wantsAI && slot === "PLAYER2") {
+      return socket.emit("error_msg", "Table full.");
     }
 
     t.players[slot] = nm;
@@ -715,9 +759,14 @@ io.on("connection", (socket) => {
     const { t } = findTableAndPlayerBySocket(socket.id);
     if (!t) return;
 
-    if (t.matchOver) { emitStateToTable(t); return; }
+    if (t.matchOver) {
+      emitStateToTable(t);
+      return;
+    }
 
-    if (t.gameOver) resetForNewGame(t);
+    if (t.gameOver) {
+      resetForNewGame(t);
+    }
 
     startHandIfPossible(t);
     emitStateToTable(t);
@@ -736,9 +785,12 @@ io.on("connection", (socket) => {
   });
 
   socket.on("disconnect", () => {
+    // keep names, clear socket association
     for (const t of tables.values()) {
       for (const p of ["PLAYER1", "PLAYER2"]) {
-        if (t.sockets[p] === socket.id) t.sockets[p] = null;
+        if (t.sockets[p] === socket.id) {
+          t.sockets[p] = null;
+        }
       }
     }
   });

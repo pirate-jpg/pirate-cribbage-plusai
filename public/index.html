@@ -8,11 +8,11 @@
 </head>
 
 <body>
-  <!-- TOAST -->
+  <!-- TOAST (kept for non-critical notices) -->
   <div id="toast" class="toast"></div>
 
-  <!-- GO MODAL -->
-  <div id="goModal" class="modalOverlay hidden">
+  <!-- GO MODAL (sticky + must dismiss) -->
+  <div id="goModal" class="modalOverlay hidden" role="dialog" aria-modal="true">
     <div class="modalCard">
       <div class="modalTitle">⚓ GO!</div>
       <div id="goModalText" class="modalText">Opponent said GO.</div>
@@ -20,8 +20,8 @@
     </div>
   </div>
 
-  <!-- GAME OVER MODAL -->
-  <div id="gameModal" class="modalOverlay hidden">
+  <!-- GAME OVER MODAL (sticky) -->
+  <div id="gameModal" class="modalOverlay hidden" role="dialog" aria-modal="true">
     <div class="modalCard">
       <div class="modalTitle">🏁 Game Over</div>
       <div id="gameModalText" class="modalText">—</div>
@@ -36,129 +36,204 @@
   <div id="joinOverlay" class="overlay">
     <div class="panel overlayCard">
 
-      <!-- MODE SELECT -->
-      <div id="modeSelect">
+      <!-- MODE CHOICE (Option A) -->
+      <div id="modeScreen">
         <h2 class="overlayTitle">🏴‍☠️ Set Sail</h2>
         <p class="overlayText">Choose a mode to begin.</p>
 
-        <button id="modeAiBtn" class="btn primary big">Play vs AI</button>
-        <button id="modePvPBtn" class="btn primary big">Play vs Player</button>
+        <button id="modeAiBtn" class="btn primary big" style="width:100%;">Play vs AI</button>
+        <div style="height:12px;"></div>
+        <button id="modePvpBtn" class="btn primary big" style="width:100%;">Play vs Player</button>
 
-        <div class="overlayHint">
+        <div class="overlayHint" style="margin-top:12px;">
           vs AI: just your name<br>
           vs Player: name + shared table code
         </div>
       </div>
 
-      <!-- AI FORM -->
-      <div id="aiForm" class="hidden">
-        <h2 class="overlayTitle">Play vs AI</h2>
+      <!-- JOIN FORM (re-uses your existing inputs/IDs so the rest of the app stays intact) -->
+      <div id="joinFormScreen" class="hidden">
+        <h2 id="joinFormTitle" class="overlayTitle">—</h2>
+        <p id="joinFormText" class="overlayText">—</p>
 
-        <div class="overlayRow">
+        <div class="overlayRow" id="nameRow">
           <div class="overlayLabel">Your name</div>
-          <input id="aiNameInput" placeholder="Name" maxlength="16"
-                 autocomplete="off" autocorrect="off" spellcheck="false"/>
+          <input
+            id="nameInput"
+            class="nameInput"
+            maxlength="16"
+            placeholder="Name"
+            autocomplete="off"
+            autocorrect="off"
+            spellcheck="false"
+          />
         </div>
 
-        <button id="aiJoinBtn" class="btn primary big">Set Sail</button>
-        <button class="btn ghost" id="backFromAi">Back</button>
-      </div>
-
-      <!-- PVP FORM -->
-      <div id="pvpForm" class="hidden">
-        <h2 class="overlayTitle">Play vs Player</h2>
-
-        <div class="overlayRow">
-          <div class="overlayLabel">Your name</div>
-          <input id="pvpNameInput" placeholder="Name" maxlength="16"
-                 autocomplete="off" autocorrect="off" spellcheck="false"/>
-        </div>
-
-        <div class="overlayRow">
+        <div class="overlayRow" id="tableRow">
           <div class="overlayLabel">Table code</div>
-          <input id="pvpTableInput" placeholder="Table code" maxlength="24"
-                 autocomplete="off" autocorrect="off"
-                 autocapitalize="characters" spellcheck="false"/>
+          <input
+            id="tableInput"
+            class="nameInput"
+            maxlength="24"
+            placeholder="Table code"
+            autocomplete="off"
+            autocorrect="off"
+            autocapitalize="characters"
+            spellcheck="false"
+          />
         </div>
 
-        <div class="overlayHint">
-          One player creates a table code.<br>
-          The other player enters the same code.
-        </div>
+        <!-- keep checkbox in DOM for compatibility, but hidden -->
+        <input id="vsAiInput" type="checkbox" style="display:none;" />
 
-        <button id="pvpJoinBtn" class="btn primary big">Set Sail</button>
-        <button class="btn ghost" id="backFromPvP">Back</button>
+        <button id="nameJoinBtn" class="btn primary big">Set Sail</button>
+
+        <div id="joinHint" class="overlayHint">—</div>
+
+        <button id="joinBackBtn" class="btn primary" style="margin-top:10px; width:100%;">Back</button>
       </div>
 
     </div>
   </div>
 
-  <!-- HEADER -->
   <header class="topbar">
     <div class="brand">
       <span class="anchor">⚓</span>
       <span class="title">Pirate Cribbage</span>
       <span class="subtitle">Pirate TV</span>
     </div>
+
     <div class="topmeta">
       <div id="tableLine" class="chip">Table: —</div>
       <div id="meLine" class="chip">You: —</div>
     </div>
   </header>
 
-  <!-- MAIN -->
   <main class="page">
     <section class="grid">
 
-      <!-- BOARD -->
-      <section class="panel boardPanel">
-        <h2>Cribbage Board</h2>
-        <div class="track">
-          <div class="lane"><div id="p1Peg" class="peg"></div></div>
-          <div class="lane"><div id="p2Peg" class="peg"></div></div>
-          <div id="ticks" class="tickRow"></div>
+      <!-- LEFT TOP: BOARD -->
+      <section class="panel boardPanel woodFrame">
+        <div class="panelHeader">
+          <h2>Cribbage Board</h2>
+          <div class="mutedSmall">Race to 121</div>
+        </div>
+
+        <div class="boardSurface">
+          <div class="track">
+            <div class="lane lane1">
+              <div class="peg peg1" id="p1Peg"></div>
+            </div>
+            <div class="lane lane2">
+              <div class="peg peg2" id="p2Peg"></div>
+            </div>
+            <div class="tickRow" id="ticks"></div>
+          </div>
+
+          <div class="legend">
+            <div class="dotLine"><span class="dot dot1"></span><span id="p1Label">P1</span></div>
+            <div class="dotLine"><span class="dot dot2"></span><span id="p2Label">P2</span></div>
+          </div>
         </div>
       </section>
 
-      <!-- PLAY -->
-      <section class="panel playPanel">
-        <h2 id="handTitle">Waiting…</h2>
-        <div id="handHelp" class="mutedSmall"></div>
-
-        <div class="countBox">
-          <div class="countLabel">COUNT</div>
-          <div id="countNum" class="countNum">0</div>
-          <div class="countHint">Keep ≤ 31</div>
+      <!-- LEFT BOTTOM: CREW -->
+      <aside class="panel crewPanel">
+        <div class="panelHeader">
+          <h2>⚓ Crew</h2>
+          <div id="playersLine" class="mutedSmall">Players: —</div>
         </div>
 
-        <div class="statusBox">
-          <div class="statusTitle">Pegging Status</div>
-          <div id="peggingStatus">—</div>
-          <div id="lastScore" class="hidden"></div>
+        <div class="miniRow">
+          <div class="pill" id="stageLine">Stage: —</div>
+          <div class="pill" id="dealerLine">Dealer: —</div>
+          <div class="pill" id="turnLine">Turn: —</div>
+        </div>
+
+        <div class="scoreBlock">
+          <div class="scoreTitle">Game Score</div>
+          <div id="scoreLine" class="scoreText">—</div>
+        </div>
+
+        <div class="scoreBlock">
+          <div class="scoreTitle">Match Score</div>
+          <div id="matchLine" class="scoreText">—</div>
+        </div>
+
+        <div class="mutedSmall" id="cribLine">Crib: —</div>
+      </aside>
+
+      <!-- RIGHT: PLAY -->
+      <section class="panel playPanel">
+        <div class="panelHeader">
+          <h2 id="handTitle">Waiting…</h2>
+          <div id="handHelp" class="mutedSmall"></div>
+        </div>
+
+        <div class="hudRow">
+          <div class="countBox">
+            <div class="countLabel">COUNT</div>
+            <div id="countNum" class="countNum">0</div>
+            <div class="countHint">Keep it ≤ 31</div>
+          </div>
+
+          <div class="statusBox">
+            <div class="statusTitle">Pegging Status</div>
+            <div id="peggingStatus" class="statusText">—</div>
+            <div id="lastScore" class="lastScore hidden">—</div>
+          </div>
         </div>
 
         <div class="pileBlock">
           <div class="pileTitle">Cards played (this count)</div>
-          <div id="pileArea"></div>
+          <div id="pileArea" class="pileArea"></div>
         </div>
 
-        <!-- YOUR HAND BLOCK -->
         <div class="handBlock">
-          <div id="handLabel" class="handLabel hidden">Your hand</div>
-          <div id="handArea"></div>
+          <!-- ✅ NEW: label inside the hand panel -->
+          <div id="yourHandLabel" class="mutedSmall" style="margin: 4px 0 8px 2px; display:none;">Your hand</div>
 
           <div class="actionRow">
-            <button id="goBtn" class="btn go hidden">GO</button>
-            <button id="nextHandBtn" class="btn primary hidden">Next Hand</button>
+            <button id="discardBtn" class="btn primary" style="display:none;">Send to Crib</button>
+            <button id="goBtn" class="btn go" style="display:none;">GO</button>
+            <button id="nextHandBtn" class="btn primary" style="display:none;">Next Hand</button>
+            <button id="newMatchBtn" class="btn primary" style="display:none;">New Match</button>
+          </div>
+
+          <div id="handArea" class="handArea"></div>
+        </div>
+
+        <!-- SHOW PANEL -->
+        <div id="showPanel" class="panel showPanel hidden">
+          <div class="panelHeader spread">
+            <h2>Show</h2>
+            <div id="cutLine" class="mutedSmall">Cut: —</div>
+          </div>
+
+          <div class="showGrid">
+            <div class="showCol">
+              <h3 id="ndTitle">Non-dealer</h3>
+              <div id="ndCards" class="cardRow"></div>
+              <ul id="ndBreak" class="breakList"></ul>
+              <div id="ndTotal" class="totalLine">Total: —</div>
+            </div>
+
+            <div class="showCol">
+              <h3 id="dTitle">Dealer</h3>
+              <div id="dCards" class="cardRow"></div>
+              <ul id="dBreak" class="breakList"></ul>
+              <div id="dTotal" class="totalLine">Total: —</div>
+            </div>
+
+            <div class="showCol">
+              <h3 id="cTitle">Crib</h3>
+              <div id="cCards" class="cardRow"></div>
+              <ul id="cBreak" class="breakList"></ul>
+              <div id="cTotal" class="totalLine">Total: —</div>
+            </div>
           </div>
         </div>
 
-        <!-- SHOW -->
-        <div id="showPanel" class="hidden">
-          <h2>Show</h2>
-          <div id="cutLine">—</div>
-          <div id="showContent"></div>
-        </div>
       </section>
 
     </section>

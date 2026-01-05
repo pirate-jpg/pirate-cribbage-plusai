@@ -428,20 +428,31 @@ function render() {
 // JOIN FLOW
 function doJoin() {
   const name = (nameInput.value || "").trim().slice(0, 16);
-  const tableId = (tableInput.value || "").trim().slice(0, 24) || "JIM1";
+  const tableId = (tableInput.value || "").trim().slice(0, 24);
   const vsAI = !!vsAiInput?.checked;
 
   if (!name) { alert("Enter a name."); return; }
+  if (!tableId) { alert("Enter a table code."); return; }
+
   socket.emit("join_table", { tableId, name, vsAI });
   joinOverlay.style.display = "none";
 }
 
+/**
+ * PRIME DIRECTIVE CHANGE:
+ * - NO prefill for name
+ * - NO prefill for table
+ * - DO NOT read URL query params
+ * - Avoid “helpful” browser autofill as much as possible
+ */
 (function initJoinDefaults(){
-  const qs = new URLSearchParams(location.search);
-  const table = (qs.get("table") || "JIM1").toString().trim().slice(0, 24);
-  const name = (qs.get("name") || "").toString().trim().slice(0, 16);
-  tableInput.value = table;
-  if (name) nameInput.value = name;
+  nameInput.value = "";
+  tableInput.value = "";
+  if (vsAiInput) vsAiInput.checked = false;
+
+  // Extra nudge against iOS autofill caching
+  nameInput.setAttribute("autocomplete", "off");
+  tableInput.setAttribute("autocomplete", "off");
 })();
 
 nameJoinBtn.onclick = doJoin;

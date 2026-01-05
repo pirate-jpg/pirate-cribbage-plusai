@@ -1,17 +1,6 @@
 // server.js
 "use strict";
 
-console.log("BOOT: starting server.js", { node: process.version, pid: process.pid });
-
-process.on("uncaughtException", (err) => {
-  console.error("UNCAUGHT EXCEPTION:", err && err.stack ? err.stack : err);
-  process.exit(1);
-});
-process.on("unhandledRejection", (err) => {
-  console.error("UNHANDLED REJECTION:", err && err.stack ? err.stack : err);
-  process.exit(1);
-});
-
 const path = require("path");
 const express = require("express");
 const http = require("http");
@@ -22,6 +11,9 @@ const server = http.createServer(app);
 const io = new Server(server);
 
 const PORT = process.env.PORT || 3000;
+
+// ✅ Tune AI pacing here (ms)
+const AI_DELAY_MS = 900;
 
 app.use(express.static(path.join(__dirname, "public")));
 app.get("/", (_req, res) => res.sendFile(path.join(__dirname, "public", "index.html")));
@@ -222,22 +214,26 @@ function makeTable(tableId) {
   return {
     tableId,
     ai: { enabled: false, aiPlayer: "PLAYER2" },
+    aiTimer: null,
+
     stage: "lobby",
     dealer: "PLAYER1",
     turn: "PLAYER1",
     players: { PLAYER1: null, PLAYER2: null },
     sockets: { PLAYER1: null, PLAYER2: null },
+
     scores: { PLAYER1: 0, PLAYER2: 0 },
     matchWins: { PLAYER1: 0, PLAYER2: 0 },
     matchOver: false,
     matchWinner: null,
     gameOver: false,
     gameWinner: null,
+
     discardsCount: { PLAYER1: 0, PLAYER2: 0 },
 
     deck: [],
-    hands: { PLAYER1: [], PLAYER2: [] },
-    pegHands: { PLAYER1: [], PLAYER2: [] },
+    hands: { PLAYER1: [], PLAYER2: [] },      // keep for show
+    pegHands: { PLAYER1: [], PLAYER2: [] },   // consumed in pegging
     crib: [],
     cut: null,
 
@@ -275,8 +271,10 @@ function resetForNewGame(t) {
 
   t.peg = { count: 0, pile: [], passed: { PLAYER1: false, PLAYER2: false }, lastPlayer: null };
 
+  // alternate dealer for fairness
   t.dealer = otherPlayer(t.dealer);
   t.turn = t.dealer;
+
   t.stage = "lobby";
 }
 
@@ -298,6 +296,7 @@ function dealHand(t) {
   t.cut = null;
 
   t.discardsCount = { PLAYER1: 0, PLAYER2: 0 };
+
   t.hands.PLAYER1 = t.deck.splice(0, 6);
   t.hands.PLAYER2 = t.deck.splice(0, 6);
   t.pegHands.PLAYER1 = [];
@@ -325,14 +324,14 @@ function emitStateToTable(t) {
     stage: t.stage,
     dealer: t.dealer,
     turn: t.turn,
-    players: { ...(t.players || { PLAYER1: null, PLAYER2: null }) },
-    scores: { ...(t.scores || { PLAYER1: 0, PLAYER2: 0 }) },
-    matchWins: { ...(t.matchWins || { PLAYER1: 0, PLAYER2: 0 }) },
-    matchOver: !!t.matchOver,
+    players: { ...t.players },
+    scores: { ...t.scores },
+    matchWins: { ...t.matchWins },
+    matchOver: t.matchOver,
     matchWinner: t.matchWinner,
-    gameOver: !!t.gameOver,
+    gameOver: t.gameOver,
     gameWinner: t.gameWinner,
-    discardsCount: { ...(t.discardsCount || { PLAYER1: 0, PLAYER2: 0 }) },
+    discardsCount: { ...t.discardsCount },
     cut: t.cut,
     peg: t.peg,
     lastPegEvent: t.lastPegEvent,
@@ -349,7 +348,7 @@ function emitStateToTable(t) {
     sock.emit("state", {
       ...base,
       me: p,
-      myHand: (t.stage === "pegging") ? t.pegHands[p] : t.hands[p],
+      myHand: t.stage === "pegging" ? t.pegHands[p] : t.hands[p],
     });
   }
 }
@@ -394,7 +393,7 @@ function aiDrain(t) {
   const ap = t.ai.aiPlayer;
   let guard = 0;
 
-  while (guard++ < 20) {
+  while (guard++ < 40) {
     if (!t.ai.enabled) break;
     if (t.matchOver || t.gameOver) break;
 
@@ -428,6 +427,16 @@ function aiDrain(t) {
   }
 }
 
+function scheduleAi(t) {
+  if (!t.ai.enabled) return;
+  if (t.aiTimer) return; // already scheduled
+  t.aiTimer = setTimeout(() => {
+    t.aiTimer = null;
+    aiDrain(t);
+    emitStateToTable(t);
+  }, AI_DELAY_MS);
+}
+
 // ---------- Discard / Pegging / Show ----------
 function internalDiscardOne(t, player, cardId) {
   if (t.stage !== "discard") return false;
@@ -449,9 +458,16 @@ function beginPegging(t) {
   t.pegHands.PLAYER2 = t.hands.PLAYER2.map(c => ({ ...c }));
 
   t.cut = t.deck.splice(0, 1)[0];
-  if (t.cut.rank === "J") t.scores[t.dealer] += 2;
+  if (t.cut.rank === "J") {
+    t.scores[t.dealer] += 2;
+  }
 
-  t.peg = { count: 0, pile: [], passed: { PLAYER1: false, PLAYER2: false }, lastPlayer: null };
+  t.peg = {
+    count: 0,
+    pile: [],
+    passed: { PLAYER1: false, PLAYER2: false },
+    lastPlayer: null,
+  };
   t.lastPegEvent = null;
   t.lastGoEvent = null;
 
@@ -476,14 +492,21 @@ function maybeEndCountAndReset(t) {
 
   if (!(bothPassed || nobodyCanPlay || t.peg.count === 31)) return false;
 
-  if (t.peg.count !== 31 && t.peg.lastPlayer) {
-    t.scores[t.peg.lastPlayer] += 1; // last card
+  const lastP = t.peg.lastPlayer;
+
+  // last card point if not 31
+  if (t.peg.count !== 31 && lastP) {
+    t.scores[lastP] += 1;
   }
 
+  // ✅ reset count
   t.peg.count = 0;
   t.peg.pile = [];
   t.peg.passed = { PLAYER1: false, PLAYER2: false };
-  if (t.peg.lastPlayer) t.turn = otherPlayer(t.peg.lastPlayer);
+
+  // ✅ CRITICAL FIX:
+  // In cribbage pegging, the player who played the last card leads the next count.
+  if (lastP) t.turn = lastP;
 
   return true;
 }
@@ -520,18 +543,23 @@ function maybeAdvanceToShow(t) {
 
   t.stage = "show";
   t.turn = t.dealer;
+
   return true;
 }
 
 function maybeEndGameOrMatch(t) {
+  // ✅ Prevent “sticky” matchWins (don’t re-award wins repeatedly)
+  if (t.gameOver || t.matchOver) return false;
+
   const p1 = t.scores.PLAYER1;
   const p2 = t.scores.PLAYER2;
   if (p1 < 121 && p2 < 121) return false;
 
   t.gameOver = true;
   t.gameWinner =
-    p1 >= 121 && p2 >= 121 ? (p1 >= p2 ? "PLAYER1" : "PLAYER2")
-    : (p1 >= 121 ? "PLAYER1" : "PLAYER2");
+    p1 >= 121 && p2 >= 121
+      ? (p1 >= p2 ? "PLAYER1" : "PLAYER2")
+      : (p1 >= 121 ? "PLAYER1" : "PLAYER2");
 
   t.matchWins[t.gameWinner] += 1;
 
@@ -539,6 +567,7 @@ function maybeEndGameOrMatch(t) {
     t.matchOver = true;
     t.matchWinner = t.gameWinner;
   }
+
   return true;
 }
 
@@ -565,7 +594,6 @@ function internalPlayCard(t, player, cardId) {
   t.peg.count = newCount;
   t.peg.pile.push(card);
   t.peg.lastPlayer = player;
-
   t.peg.passed[player] = false;
 
   if (t.peg.count === 31) {
@@ -600,7 +628,7 @@ function internalGo(t, player) {
   return true;
 }
 
-// ---------- Join helpers ----------
+// ---------- NEW HELPERS FOR JOIN FIXES ----------
 function normalizeTableId(raw) {
   return String(raw || "").trim().slice(0, 24);
 }
@@ -621,24 +649,19 @@ function firstOpenSeatByName(t) {
   return null;
 }
 
-function findTableAndPlayerBySocket(socketId) {
-  for (const t of tables.values()) {
-    for (const p of ["PLAYER1", "PLAYER2"]) {
-      if (t.sockets[p] === socketId) return { t, p };
-    }
-  }
-  return { t: null, p: null };
-}
-
 // ---------- socket.io ----------
 io.on("connection", (socket) => {
   socket.on("join_table", ({ tableId, name, vsAI } = {}) => {
     const nm = normalizeName(name);
     const wantsAI = !!vsAI;
+
     if (!nm) return socket.emit("error_msg", "Enter a name.");
 
     const tid = wantsAI ? makeAiTableId() : normalizeTableId(tableId);
-    if (!wantsAI && !tid) return socket.emit("error_msg", "Enter a table code.");
+
+    if (!wantsAI && !tid) {
+      return socket.emit("error_msg", "Enter a table code.");
+    }
 
     const t = getOrCreateTable(tid);
 
@@ -658,8 +681,13 @@ io.on("connection", (socket) => {
     if (!slot) slot = firstOpenSeatByName(t);
     if (wantsAI) slot = "PLAYER1";
 
-    if (!slot) return socket.emit("error_msg", "Table full.");
-    if (wantsAI && slot === "PLAYER2") return socket.emit("error_msg", "Table full.");
+    if (!slot) {
+      return socket.emit("error_msg", "Table full.");
+    }
+
+    if (wantsAI && slot === "PLAYER2") {
+      return socket.emit("error_msg", "Table full.");
+    }
 
     t.players[slot] = nm;
     t.sockets[slot] = socket.id;
@@ -670,10 +698,10 @@ io.on("connection", (socket) => {
     if (t.gameOver) resetForNewGame(t);
 
     startHandIfPossible(t);
+    emitStateToTable(t);
 
-    emitStateToTable(t);
-    aiDrain(t);
-    emitStateToTable(t);
+    // AI pacing
+    scheduleAi(t);
   });
 
   socket.on("discard_one", ({ cardId } = {}) => {
@@ -683,11 +711,12 @@ io.on("connection", (socket) => {
     const ok = internalDiscardOne(t, p, String(cardId));
     if (!ok) { emitStateToTable(t); return; }
 
-    if (t.discardsCount.PLAYER1 === 2 && t.discardsCount.PLAYER2 === 2) beginPegging(t);
+    if (t.discardsCount.PLAYER1 === 2 && t.discardsCount.PLAYER2 === 2) {
+      beginPegging(t);
+    }
 
     emitStateToTable(t);
-    aiDrain(t);
-    emitStateToTable(t);
+    scheduleAi(t);
   });
 
   socket.on("play_card", ({ cardId } = {}) => {
@@ -696,8 +725,7 @@ io.on("connection", (socket) => {
 
     internalPlayCard(t, p, String(cardId));
     emitStateToTable(t);
-    aiDrain(t);
-    emitStateToTable(t);
+    scheduleAi(t);
   });
 
   socket.on("go", () => {
@@ -706,42 +734,57 @@ io.on("connection", (socket) => {
 
     internalGo(t, p);
     emitStateToTable(t);
-    aiDrain(t);
-    emitStateToTable(t);
+    scheduleAi(t);
   });
 
   socket.on("next_hand", () => {
     const { t } = findTableAndPlayerBySocket(socket.id);
     if (!t) return;
 
-    if (t.matchOver) return emitStateToTable(t);
+    if (t.matchOver) {
+      emitStateToTable(t);
+      return;
+    }
 
-    if (t.gameOver) resetForNewGame(t);
+    if (t.gameOver) {
+      resetForNewGame(t);
+    }
 
     startHandIfPossible(t);
     emitStateToTable(t);
-    aiDrain(t);
-    emitStateToTable(t);
+    scheduleAi(t);
   });
 
   socket.on("new_match", () => {
     const { t } = findTableAndPlayerBySocket(socket.id);
     if (!t) return;
+
     resetForNewMatch(t);
     startHandIfPossible(t);
     emitStateToTable(t);
-    aiDrain(t);
-    emitStateToTable(t);
+    scheduleAi(t);
   });
 
   socket.on("disconnect", () => {
     for (const t of tables.values()) {
       for (const p of ["PLAYER1", "PLAYER2"]) {
-        if (t.sockets[p] === socket.id) t.sockets[p] = null;
+        if (t.sockets[p] === socket.id) {
+          t.sockets[p] = null;
+        }
       }
     }
   });
 });
 
-console.log("BOOT: about to listen", { PORT });
-server.listen(PORT, () => console.log(`BOOT: listening on ${PORT}`));
+function findTableAndPlayerBySocket(socketId) {
+  for (const t of tables.values()) {
+    for (const p of ["PLAYER1", "PLAYER2"]) {
+      if (t.sockets[p] === socketId) return { t, p };
+    }
+  }
+  return { t: null, p: null };
+}
+
+server.listen(PORT, () => {
+  console.log(`Server listening on ${PORT}`);
+});

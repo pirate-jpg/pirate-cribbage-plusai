@@ -56,13 +56,20 @@ const cTotal = el("cTotal");
 // Toast
 const toast = el("toast");
 
-// Join overlay
+// Join overlay + Option A UI
 const joinOverlay = el("joinOverlay");
+const joinForm = el("joinForm");
+const modeSelect = el("modeSelect");
+const joinFields = el("joinFields");
+const modeAiBtn = el("modeAiBtn");
+const modePvpBtn = el("modePvpBtn");
+const backToModeBtn = el("backToModeBtn");
+const joinHint = el("joinHint");
+const tableRow = el("tableRow");
+
 const nameInput = el("nameInput");
 const tableInput = el("tableInput");
 const vsAiInput = el("vsAiInput");
-const nameJoinBtn = el("nameJoinBtn");
-const joinForm = el("joinForm");
 
 // GO modal
 const goModal = el("goModal");
@@ -77,7 +84,8 @@ const gameModalNewMatch = el("gameModalNewMatch");
 
 let state = null;
 let lastGoSeenTs = 0;
-let lastGameOverShownKey = ""; // prevents re-showing modal on every state emit
+let lastGameOverShownKey = "";
+let joinMode = null; // "ai" | "pvp" | null
 
 function cardValue(rank) {
   if (rank === "A") return 1;
@@ -164,7 +172,7 @@ function hideModal(modalEl) {
   modalEl.classList.add("hidden");
 }
 
-// Sticky GO modal: show ONLY when opponent says GO (per your preference)
+// Sticky GO modal: show ONLY when opponent says GO
 function maybeShowGoModal() {
   const ge = state?.lastGoEvent;
   if (!ge || !ge.ts) return;
@@ -172,7 +180,6 @@ function maybeShowGoModal() {
 
   lastGoSeenTs = ge.ts;
 
-  // Only show if opponent said GO
   if (ge.player === state.me) return;
 
   const who = ge.player === state.me ? "You" : "Opponent";
@@ -182,17 +189,12 @@ function maybeShowGoModal() {
 
 goModalOk.onclick = () => hideModal(goModal);
 
-// Game over modal: show once per game end
 function maybeShowGameOverModal() {
   if (!state) return;
   if (state.stage !== "show") return;
   if (!state.gameOver) return;
 
-  const key =
-    `${state.tableId}|${state.matchWins?.PLAYER1 ?? 0}|${state.matchWins?.PLAYER2 ?? 0}|` +
-    `${state.scores?.PLAYER1 ?? 0}|${state.scores?.PLAYER2 ?? 0}|${state.gameWinner ?? ""}|` +
-    `${state.matchOver ? "M" : "G"}`;
-
+  const key = `${state.tableId}|${state.matchWins?.PLAYER1 ?? 0}|${state.matchWins?.PLAYER2 ?? 0}|${state.scores?.PLAYER1 ?? 0}|${state.scores?.PLAYER2 ?? 0}|${state.gameWinner ?? ""}|${state.matchOver ? "M" : "G"}`;
   if (key === lastGameOverShownKey) return;
   lastGameOverShownKey = key;
 
@@ -340,7 +342,6 @@ function render() {
   renderPileAndHud();
   renderShow();
 
-  // buttons
   discardBtn.style.display = "none";
   goBtn.style.display = "none";
   nextHandBtn.style.display = "none";
@@ -348,7 +349,6 @@ function render() {
 
   handArea.innerHTML = "";
 
-  // STAGES
   if (state.stage === "lobby") {
     handTitle.textContent = "Waiting for crew…";
     handHelp.textContent = `If this is 2-player, open the same table code on the other device: "${state.tableId}".`;
@@ -427,82 +427,79 @@ function render() {
   }
 }
 
-// JOIN FLOW
+/* -------------------------
+   JOIN FLOW (Option A)
+-------------------------- */
+
+function blankJoinFields() {
+  if (nameInput) nameInput.value = "";
+  if (tableInput) tableInput.value = "";
+  if (vsAiInput) vsAiInput.checked = false;
+}
+
+// Force blank on every load/restore to fight iOS autofill cache
+(function initBlanking(){
+  blankJoinFields();
+  window.addEventListener("pageshow", blankJoinFields);
+  setTimeout(blankJoinFields, 50);
+  setTimeout(blankJoinFields, 250);
+})();
+
+function showModeSelect() {
+  joinMode = null;
+  blankJoinFields();
+  modeSelect.classList.remove("hidden");
+  joinFields.classList.add("hidden");
+}
+
+function showJoinFields(mode) {
+  joinMode = mode; // "ai" or "pvp"
+  blankJoinFields();
+
+  // Set vsAiInput for compatibility with server payload
+  vsAiInput.checked = (mode === "ai");
+
+  // Toggle table row
+  if (mode === "ai") {
+    tableRow.classList.add("hidden");
+    joinHint.textContent = "Tip: vs AI doesn’t need a table code.";
+  } else {
+    tableRow.classList.remove("hidden");
+    joinHint.textContent = "Tip: Use the same table code on another device for 2-player.";
+  }
+
+  modeSelect.classList.add("hidden");
+  joinFields.classList.remove("hidden");
+
+  setTimeout(() => nameInput?.focus?.(), 0);
+}
+
+modeAiBtn.onclick = () => showJoinFields("ai");
+modePvpBtn.onclick = () => showJoinFields("pvp");
+backToModeBtn.onclick = showModeSelect;
+
 function doJoin() {
   const name = (nameInput.value || "").trim().slice(0, 16);
-  const tableId = (tableInput.value || "").trim().slice(0, 24);
-  const vsAI = !!vsAiInput?.checked;
+  const vsAI = !!vsAiInput.checked;
+
+  // table required only for pvp
+  const tableIdRaw = (tableInput.value || "").trim().slice(0, 24);
+  const tableId = vsAI ? "" : tableIdRaw;
 
   if (!name) { alert("Enter a name."); return; }
-  if (!tableId) { alert("Enter a table code."); return; }
+  if (!vsAI && !tableId) { alert("Enter a table code."); return; }
 
   socket.emit("join_table", { tableId, name, vsAI });
   joinOverlay.style.display = "none";
 }
 
-/**
- * PERMANENT SAFARI FIX:
- * iOS Safari "restores" form values by matching prior field identity (id/name/etc).
- * We keep stable ids for JS, but randomize NAME each load so Safari cannot restore.
- * Then we blank repeatedly on restore events.
- */
-(function killAutofillForever(){
-  function rand() {
-    try {
-      const a = new Uint32Array(2);
-      crypto.getRandomValues(a);
-      return `${a[0].toString(16)}${a[1].toString(16)}`;
-    } catch {
-      return `${Math.random().toString(16).slice(2)}${Date.now().toString(16)}`;
-    }
-  }
+joinForm.addEventListener("submit", (e) => {
+  e.preventDefault();
+  doJoin();
+});
 
-  function hardBlank() {
-    if (!nameInput || !tableInput) return;
-
-    // Randomize field identity each time (Safari can't match past saved value)
-    nameInput.setAttribute("name", `pirate_name_${rand()}`);
-    tableInput.setAttribute("name", `pirate_table_${rand()}`);
-
-    // Aggressively prevent autofill/restore
-    nameInput.setAttribute("autocomplete", "off");
-    tableInput.setAttribute("autocomplete", "off");
-
-    // Clear BOTH value and defaultValue (Safari sometimes uses defaultValue on restore)
-    nameInput.value = "";
-    tableInput.value = "";
-    nameInput.defaultValue = "";
-    tableInput.defaultValue = "";
-
-    if (vsAiInput) vsAiInput.checked = false;
-
-    // If wrapped in a form, reset too (extra belt+suspenders)
-    if (joinForm && typeof joinForm.reset === "function") joinForm.reset();
-  }
-
-  // Run immediately + multiple delayed passes (beats late restore)
-  hardBlank();
-  setTimeout(hardBlank, 0);
-  setTimeout(hardBlank, 50);
-  setTimeout(hardBlank, 250);
-  setTimeout(hardBlank, 800);
-
-  // On iOS, pageshow fires on back/forward cache restores
-  window.addEventListener("pageshow", hardBlank);
-
-  // Some restores happen when tab becomes visible again
-  document.addEventListener("visibilitychange", () => {
-    if (!document.hidden) hardBlank();
-  });
-
-  // If Safari tries to inject on focus, wipe again
-  nameInput?.addEventListener("focus", () => setTimeout(hardBlank, 0));
-  tableInput?.addEventListener("focus", () => setTimeout(hardBlank, 0));
-})();
-
-nameJoinBtn.onclick = doJoin;
-nameInput.addEventListener("keydown", (e)=>{ if (e.key === "Enter") doJoin(); });
-tableInput.addEventListener("keydown", (e)=>{ if (e.key === "Enter") doJoin(); });
+// default view
+showModeSelect();
 
 socket.on("connect", () => {
   // idle until Set Sail

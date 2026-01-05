@@ -80,7 +80,7 @@ let lastGameOverShownKey = ""; // prevents re-showing modal on every state emit
 
 function cardValue(rank) {
   if (rank === "A") return 1;
-  if (["K","Q","J"].includes(rank)) return 10;
+  if (["K", "Q", "J"].includes(rank)) return 10;
   return parseInt(rank, 10);
 }
 
@@ -112,7 +112,9 @@ function makeCardButton(card, opts = {}) {
   return btn;
 }
 
-function clamp(n, min, max) { return Math.max(min, Math.min(max, n)); }
+function clamp(n, min, max) {
+  return Math.max(min, Math.min(max, n));
+}
 
 function initTicksOnce() {
   if (!ticks) return;
@@ -438,21 +440,18 @@ function doJoin() {
   joinOverlay.style.display = "none";
 }
 
-/**
- * PRIME DIRECTIVE CHANGE:
- * - NO prefill for name
- * - NO prefill for table
- * - DO NOT read URL query params
- * - Avoid “helpful” browser autofill as much as possible
- */
+// FORCE BLANK JOIN FIELDS (every load, every restore)
 (function initJoinDefaults(){
-  nameInput.value = "";
-  tableInput.value = "";
-  if (vsAiInput) vsAiInput.checked = false;
+  function blankJoinFields() {
+    if (nameInput) nameInput.value = "";
+    if (tableInput) tableInput.value = "";
+    if (vsAiInput) vsAiInput.checked = false;
+  }
 
-  // Extra nudge against iOS autofill caching
-  nameInput.setAttribute("autocomplete", "off");
-  tableInput.setAttribute("autocomplete", "off");
+  blankJoinFields();
+  window.addEventListener("pageshow", blankJoinFields);
+  setTimeout(blankJoinFields, 50);
+  setTimeout(blankJoinFields, 250);
 })();
 
 nameJoinBtn.onclick = doJoin;

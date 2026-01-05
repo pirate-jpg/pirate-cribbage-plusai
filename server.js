@@ -215,6 +215,7 @@ function makeTable(tableId) {
   return {
     tableId,
     ai: { enabled: false, aiPlayer: "PLAYER2" }, // default AI is PLAYER2
+    aiTimer: null, // ✅ used for delayed AI actions
     stage: "lobby",
     dealer: "PLAYER1",
     turn: "PLAYER1",
@@ -274,6 +275,9 @@ function resetForNewGame(t) {
   t.turn = t.dealer;
 
   t.stage = "lobby";
+
+  // clear any queued AI
+  if (t.aiTimer) { clearTimeout(t.aiTimer); t.aiTimer = null; }
 }
 
 function resetForNewMatch(t) {
@@ -306,10 +310,6 @@ function dealHand(t) {
   t.lastPegEvent = null;
   t.lastGoEvent = null;
   t.show = null;
-
-  if (t.ai.enabled) {
-    aiDoDiscardIfNeeded(t);
-  }
 }
 
 function startHandIfPossible(t) {
@@ -369,65 +369,97 @@ function aiChoosePegCard(hand, count) {
   return playable[0];
 }
 
-function aiDoDiscardIfNeeded(t) {
+function playableExists(hand, count) {
+  return hand.some(c => count + cardValue(c.rank) <= 31);
+}
+
+// ✅ AI runs ONE action at a time (for visibility / pacing)
+function aiStep(t) {
   if (!t.ai.enabled) return false;
   const ap = t.ai.aiPlayer;
 
-  if (t.stage !== "discard") return false;
-  if (t.discardsCount[ap] >= 2) return false;
+  if (t.matchOver || t.gameOver) return false;
 
-  const needed = 2 - t.discardsCount[ap];
-  if (needed <= 0) return false;
+  // Discard phase: take one discard at a time
+  if (t.stage === "discard") {
+    if (t.discardsCount[ap] < 2) {
+      const needed = 2 - t.discardsCount[ap];
+      const hand = t.hands[ap];
+      if (needed > 0 && hand.length >= needed) {
+        const pick = aiChooseDiscard(hand)[0];
+        if (pick) {
+          const did = internalDiscardOne(t, ap, pick.id);
+          if (!did) return false;
+        }
+      }
+    }
 
-  const hand = t.hands[ap];
-  if (hand.length < needed) return false;
+    // If both players finished discarding, start pegging
+    if (t.discardsCount.PLAYER1 === 2 && t.discardsCount.PLAYER2 === 2) {
+      beginPegging(t);
+    }
 
-  const picks = aiChooseDiscard(hand).slice(0, needed);
-  let did = false;
-  for (const c of picks) {
-    if (internalDiscardOne(t, ap, c.id)) did = true;
+    return true;
   }
-  return did;
+
+  // Pegging: if it's AI's turn, play one card or say GO
+  if (t.stage === "pegging" && t.turn === ap) {
+    const count = t.peg.count;
+    const card = aiChoosePegCard(t.pegHands[ap], count);
+    if (card) {
+      const didPlay = internalPlayCard(t, ap, card.id);
+      return !!didPlay;
+    } else {
+      const didGo = internalGo(t, ap);
+      return !!didGo;
+    }
+  }
+
+  return false;
 }
 
-function aiDrain(t) {
+// ✅ schedules AI with delay and emits after the action
+function scheduleAi(t, delayMs) {
   if (!t.ai.enabled) return;
 
-  const ap = t.ai.aiPlayer;
-  let guard = 0;
-
-  while (guard++ < 20) {
-    if (!t.ai.enabled) break;
-    if (t.matchOver || t.gameOver) break;
-
-    if (t.stage === "discard") {
-      const didDiscard = aiDoDiscardIfNeeded(t);
-
-      if (t.discardsCount.PLAYER1 === 2 && t.discardsCount.PLAYER2 === 2) {
-        beginPegging(t);
-        continue;
-      }
-
-      if (!didDiscard) break;
-      continue;
-    }
-
-    if (t.stage === "pegging" && t.turn === ap) {
-      const count = t.peg.count;
-      const card = aiChoosePegCard(t.pegHands[ap], count);
-      if (card) {
-        const didPlay = internalPlayCard(t, ap, card.id);
-        if (!didPlay) break;
-        continue;
-      } else {
-        const didGo = internalGo(t, ap);
-        if (!didGo) break;
-        continue;
-      }
-    }
-
-    break;
+  // Avoid timer pile-ups
+  if (t.aiTimer) {
+    clearTimeout(t.aiTimer);
+    t.aiTimer = null;
   }
+
+  t.aiTimer = setTimeout(() => {
+    t.aiTimer = null;
+
+    // Re-check state (prevents races)
+    if (!t.ai.enabled) return;
+    if (t.matchOver || t.gameOver) {
+      emitStateToTable(t);
+      return;
+    }
+
+    const did = aiStep(t);
+    emitStateToTable(t);
+
+    // If AI still has work to do, schedule next step
+    const ap = t.ai.aiPlayer;
+    const aiNeedsMoreDiscards = (t.stage === "discard" && t.discardsCount[ap] < 2);
+    const aiStillTurnPegging = (t.stage === "pegging" && t.turn === ap);
+
+    if (did && (aiNeedsMoreDiscards || aiStillTurnPegging)) {
+      // If AI just scored, give more time so humans can see it.
+      const aiPts = (t.lastPegEvent && t.lastPegEvent.player === ap) ? (t.lastPegEvent.pts || 0) : 0;
+      const nextDelay = aiPts > 0 ? 850 : 420;
+      scheduleAi(t, nextDelay);
+    }
+  }, delayMs);
+}
+
+function computeHumanToAiDelayMs(t, humanPlayer) {
+  // Longer delay if human just scored, so the UI shows the message and count.
+  const ev = t.lastPegEvent;
+  const humanScored = ev && ev.player === humanPlayer && (ev.pts || 0) > 0;
+  return humanScored ? 950 : 480;
 }
 
 // ---------- Discard / Pegging / Show ----------
@@ -466,10 +498,6 @@ function beginPegging(t) {
 
   t.stage = "pegging";
   t.turn = otherPlayer(t.dealer);
-}
-
-function playableExists(hand, count) {
-  return hand.some(c => count + cardValue(c.rank) <= 31);
 }
 
 function maybeEndCountAndReset(t) {
@@ -700,9 +728,13 @@ io.on("connection", (socket) => {
 
     startHandIfPossible(t);
 
+    // Emit immediately so the player sees something right away
     emitStateToTable(t);
-    aiDrain(t);
-    emitStateToTable(t);
+
+    // If AI needs to act (discard/pegging), do it on a short delay (so the UI doesn't "jump")
+    if (t.ai.enabled) {
+      scheduleAi(t, 420);
+    }
   });
 
   socket.on("discard_one", ({ cardId } = {}) => {
@@ -717,8 +749,11 @@ io.on("connection", (socket) => {
     }
 
     emitStateToTable(t);
-    aiDrain(t);
-    emitStateToTable(t);
+
+    // AI response (paced)
+    if (t.ai.enabled) {
+      scheduleAi(t, 420);
+    }
   });
 
   socket.on("discard_to_crib", ({ cardIds } = {}) => {
@@ -731,8 +766,11 @@ io.on("connection", (socket) => {
     if (t.discardsCount.PLAYER1 === 2 && t.discardsCount.PLAYER2 === 2) beginPegging(t);
 
     emitStateToTable(t);
-    aiDrain(t);
-    emitStateToTable(t);
+
+    // AI response (paced)
+    if (t.ai.enabled) {
+      scheduleAi(t, 420);
+    }
   });
 
   socket.on("play_card", ({ cardId } = {}) => {
@@ -741,8 +779,11 @@ io.on("connection", (socket) => {
 
     internalPlayCard(t, p, String(cardId));
     emitStateToTable(t);
-    aiDrain(t);
-    emitStateToTable(t);
+
+    // AI response with human-visible delay (bigger if you just scored)
+    if (t.ai.enabled) {
+      scheduleAi(t, computeHumanToAiDelayMs(t, p));
+    }
   });
 
   socket.on("go", () => {
@@ -751,8 +792,11 @@ io.on("connection", (socket) => {
 
     internalGo(t, p);
     emitStateToTable(t);
-    aiDrain(t);
-    emitStateToTable(t);
+
+    // AI response with human-visible delay
+    if (t.ai.enabled) {
+      scheduleAi(t, computeHumanToAiDelayMs(t, p));
+    }
   });
 
   socket.on("next_hand", () => {
@@ -770,18 +814,23 @@ io.on("connection", (socket) => {
 
     startHandIfPossible(t);
     emitStateToTable(t);
-    aiDrain(t);
-    emitStateToTable(t);
+
+    if (t.ai.enabled) {
+      scheduleAi(t, 420);
+    }
   });
 
   socket.on("new_match", () => {
     const { t } = findTableAndPlayerBySocket(socket.id);
     if (!t) return;
+
     resetForNewMatch(t);
     startHandIfPossible(t);
     emitStateToTable(t);
-    aiDrain(t);
-    emitStateToTable(t);
+
+    if (t.ai.enabled) {
+      scheduleAi(t, 420);
+    }
   });
 
   socket.on("disconnect", () => {

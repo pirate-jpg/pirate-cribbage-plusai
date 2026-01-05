@@ -23,7 +23,6 @@ const discardBtn = el("discardBtn");
 const goBtn = el("goBtn");
 const nextHandBtn = el("nextHandBtn");
 const newMatchBtn = el("newMatchBtn");
-const yourHandLabel = el("yourHandLabel");
 
 // Pegging HUD
 const pileArea = el("pileArea");
@@ -57,18 +56,8 @@ const cTotal = el("cTotal");
 // Toast
 const toast = el("toast");
 
-// JOIN overlay + Option A screens
+// Join overlay
 const joinOverlay = el("joinOverlay");
-const modeScreen = el("modeScreen");
-const joinFormScreen = el("joinFormScreen");
-const modeAiBtn = el("modeAiBtn");
-const modePvpBtn = el("modePvpBtn");
-const joinFormTitle = el("joinFormTitle");
-const joinFormText = el("joinFormText");
-const joinHint = el("joinHint");
-const joinBackBtn = el("joinBackBtn");
-
-// Existing inputs
 const nameInput = el("nameInput");
 const tableInput = el("tableInput");
 const vsAiInput = el("vsAiInput");
@@ -87,9 +76,8 @@ const gameModalNewMatch = el("gameModalNewMatch");
 
 let state = null;
 let lastGoSeenTs = 0;
-let lastGameOverShownKey = "";
+let lastGameOverShownKey = ""; // prevents re-showing modal on every state emit
 
-// ----- helpers -----
 function cardValue(rank) {
   if (rank === "A") return 1;
   if (["K", "Q", "J"].includes(rank)) return 10;
@@ -177,7 +165,7 @@ function hideModal(modalEl) {
   modalEl.classList.add("hidden");
 }
 
-// Sticky GO modal: show ONLY when opponent says GO
+// Sticky GO modal: show ONLY when opponent says GO (per your preference)
 function maybeShowGoModal() {
   const ge = state?.lastGoEvent;
   if (!ge || !ge.ts) return;
@@ -229,6 +217,14 @@ gameModalNewMatch.onclick = () => {
   socket.emit("new_match");
 };
 
+function clearPeggingHudForShow() {
+  // When we reach SHOW, we do NOT want stale pegging visuals.
+  if (countNum) countNum.textContent = "0";
+  if (pileArea) pileArea.innerHTML = "";
+  if (peggingStatus) peggingStatus.textContent = "";
+  if (lastScore) lastScore.classList.add("hidden");
+}
+
 function renderPileAndHud() {
   if (!state) return;
 
@@ -260,6 +256,7 @@ function renderPileAndHud() {
     lastScore.classList.add("hidden");
   }
 
+  // Sticky GO modal
   maybeShowGoModal();
 }
 
@@ -346,6 +343,8 @@ function render() {
 
   initTicksOnce();
   renderBoard();
+
+  // Always render pile/HUD normally (it clears itself if not pegging)
   renderPileAndHud();
   renderShow();
 
@@ -356,7 +355,6 @@ function render() {
   newMatchBtn.style.display = "none";
 
   handArea.innerHTML = "";
-  if (yourHandLabel) yourHandLabel.style.display = "none";
 
   // STAGES
   if (state.stage === "lobby") {
@@ -372,8 +370,6 @@ function render() {
     const cribOwner = playerName(state.dealer);
     handTitle.textContent = "Your Hand";
     handHelp.textContent = `Click a card to send it to ${cribOwner}'s crib (send 2 total).`;
-
-    if (yourHandLabel) yourHandLabel.style.display = "block";
 
     const myHand = state.myHand || [];
     myHand.forEach(card => {
@@ -393,8 +389,6 @@ function render() {
     showPanel.classList.add("hidden");
     handTitle.textContent = "Pegging";
     handHelp.textContent = "Play a card without exceeding 31. If you can’t play, press GO.";
-
-    if (yourHandLabel) yourHandLabel.style.display = "block";
 
     const myTurn = state.turn === state.me;
     const myHand = state.myHand || [];
@@ -418,6 +412,9 @@ function render() {
   }
 
   if (state.stage === "show") {
+    // ✅ IMPORTANT: Clear pegging visuals so they don't "stick" into SHOW.
+    clearPeggingHudForShow();
+
     handTitle.textContent = "Show";
     handHelp.textContent = state.gameOver
       ? `${playerName(state.gameWinner)} won this game.`
@@ -432,76 +429,31 @@ function render() {
       handHelp.textContent = `${playerName(state.matchWinner)} wins the match (best of 3).`;
     }
 
-    const myHand = state.myHand || [];
-    myHand.forEach(card => handArea.appendChild(makeCardButton(card, { disabled: true })));
-    if (state.cut) handArea.appendChild(makeCardButton(state.cut, { disabled: true }));
+    // ✅ Replace the old "hand cards" with a simple message to avoid repetition.
+    handArea.innerHTML = "";
+    const msg = document.createElement("div");
+    msg.className = "mutedSmall";
+    msg.style.padding = "6px 2px";
+    msg.textContent = "See scoring below.";
+    handArea.appendChild(msg);
 
+    // Sticky game-over modal
     maybeShowGameOverModal();
+
     return;
   }
 }
 
-// ----- Option A join flow -----
-function randId(len = 6) {
-  const chars = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
-  let s = "";
-  for (let i = 0; i < len; i++) s += chars[Math.floor(Math.random() * chars.length)];
-  return s;
-}
-
-function showModeScreen() {
-  modeScreen.classList.remove("hidden");
-  joinFormScreen.classList.add("hidden");
-  nameInput.value = "";
-  tableInput.value = "";
-  vsAiInput.checked = false;
-}
-
-function showJoinForm({ mode }) {
-  modeScreen.classList.add("hidden");
-  joinFormScreen.classList.remove("hidden");
-
-  if (mode === "AI") {
-    joinFormTitle.textContent = "Play vs AI";
-    joinFormText.textContent = "Enter your name to start.";
-    joinHint.textContent = "Tip: vs AI doesn’t need a table code.";
-    vsAiInput.checked = true;
-
-    // Hide table row, but generate a unique table id under the hood so “table full” can’t happen.
-    el("tableRow").style.display = "none";
-    tableInput.value = `AI-${randId(6)}`;
-  } else {
-    joinFormTitle.textContent = "Play vs Player";
-    joinFormText.textContent = "Enter your name and a shared table code.";
-    joinHint.textContent = "One player creates a table code. The other player enters the same code.";
-    vsAiInput.checked = false;
-
-    el("tableRow").style.display = "block";
-    tableInput.value = "";
-  }
-
-  // Always focus name first
-  setTimeout(() => nameInput.focus(), 50);
-}
-
-modeAiBtn.onclick = () => showJoinForm({ mode: "AI" });
-modePvpBtn.onclick = () => showJoinForm({ mode: "PVP" });
-joinBackBtn.onclick = () => showModeScreen();
-
-// JOIN submit
+// JOIN FLOW
 function doJoin() {
   const name = (nameInput.value || "").trim().slice(0, 16);
   const tableId = (tableInput.value || "").trim().slice(0, 24);
   const vsAI = !!vsAiInput?.checked;
 
   if (!name) { alert("Enter a name."); return; }
+  if (!tableId) { alert("Enter a table code."); return; }
 
-  if (!vsAI && !tableId) { alert("Enter a table code."); return; }
-
-  // Safety: if AI mode and somehow tableId is empty, generate one
-  const finalTable = vsAI ? (tableId || `AI-${randId(6)}`) : tableId;
-
-  socket.emit("join_table", { tableId: finalTable, name, vsAI });
+  socket.emit("join_table", { tableId, name, vsAI });
   joinOverlay.style.display = "none";
 }
 
@@ -509,19 +461,9 @@ nameJoinBtn.onclick = doJoin;
 nameInput.addEventListener("keydown", (e)=>{ if (e.key === "Enter") doJoin(); });
 tableInput.addEventListener("keydown", (e)=>{ if (e.key === "Enter") doJoin(); });
 
-// Start on mode screen; clear any autofill
-(function initJoinDefaults(){
-  function blankAll() {
-    if (nameInput) nameInput.value = "";
-    if (tableInput) tableInput.value = "";
-    if (vsAiInput) vsAiInput.checked = false;
-    showModeScreen();
-  }
-  blankAll();
-  window.addEventListener("pageshow", blankAll);
-  setTimeout(blankAll, 50);
-  setTimeout(blankAll, 250);
-})();
+socket.on("connect", () => {
+  // idle until Set Sail
+});
 
 socket.on("state", (s) => {
   state = s;

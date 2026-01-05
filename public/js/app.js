@@ -2,6 +2,115 @@
 const socket = io();
 const el = (id) => document.getElementById(id);
 
+// ===== JOIN UI (Option A) =====
+const joinOverlay = el("joinOverlay");
+const modeStep = el("modeStep");
+const fieldsStep = el("fieldsStep");
+const joinSubtitle = el("joinSubtitle");
+
+const modeAiBtn = el("modeAiBtn");
+const modePvpBtn = el("modePvpBtn");
+const backBtn = el("backBtn");
+
+const joinForm = el("joinForm");
+const nameInput = el("nameInput");
+const tableRow = el("tableRow");
+const tableInput = el("tableInput");
+const setSailBtn = el("setSailBtn");
+const modeHint = el("modeHint");
+
+let joinMode = null; // "AI" | "PVP"
+
+function randCode(len = 4) {
+  return Math.random().toString(36).slice(2, 2 + len).toUpperCase();
+}
+
+function blankJoinFieldsHard() {
+  if (nameInput) nameInput.value = "";
+  if (tableInput) tableInput.value = "";
+
+  // defeat autofill: randomize "name" attributes each load
+  const stamp = Date.now();
+  if (nameInput) nameInput.setAttribute("name", `player_name_${stamp}`);
+  if (tableInput) tableInput.setAttribute("name", `table_code_${stamp}`);
+
+  // also try to clear any browser restored values
+  setTimeout(() => {
+    if (nameInput) nameInput.value = "";
+    if (tableInput) tableInput.value = "";
+  }, 50);
+  setTimeout(() => {
+    if (nameInput) nameInput.value = "";
+    if (tableInput) tableInput.value = "";
+  }, 250);
+}
+
+function showModeStep() {
+  joinMode = null;
+  if (modeStep) modeStep.style.display = "block";
+  if (fieldsStep) fieldsStep.style.display = "none";
+  if (joinSubtitle) joinSubtitle.textContent = "Choose a mode to start.";
+  blankJoinFieldsHard();
+}
+
+function showFieldsStep(mode) {
+  joinMode = mode;
+  if (modeStep) modeStep.style.display = "none";
+  if (fieldsStep) fieldsStep.style.display = "block";
+
+  blankJoinFieldsHard();
+
+  if (mode === "AI") {
+    if (joinSubtitle) joinSubtitle.textContent = "Play vs AI — enter your name.";
+    if (tableRow) tableRow.style.display = "none";
+    if (modeHint) modeHint.textContent = "Tip: vs AI doesn’t need a table code.";
+    if (nameInput) nameInput.focus();
+  } else {
+    if (joinSubtitle) joinSubtitle.textContent = "Play vs Player — enter name + shared table code.";
+    if (tableRow) tableRow.style.display = "block";
+    if (modeHint) modeHint.textContent = "Tip: both players must use the same table code.";
+    if (nameInput) nameInput.focus();
+  }
+}
+
+if (modeAiBtn) modeAiBtn.onclick = () => showFieldsStep("AI");
+if (modePvpBtn) modePvpBtn.onclick = () => showFieldsStep("PVP");
+if (backBtn) backBtn.onclick = () => showModeStep();
+
+// Always start on mode screen, always blank fields on load/restore
+showModeStep();
+window.addEventListener("pageshow", showModeStep);
+
+// Join submit
+function doJoinFromForm(e) {
+  if (e) e.preventDefault();
+
+  const name = (nameInput?.value || "").trim().slice(0, 16);
+  if (!name) { alert("Enter a name."); return; }
+
+  if (joinMode === "AI") {
+    const tableId = `AI-${randCode(6)}`;
+    socket.emit("join_table", { tableId, name, vsAI: true });
+    if (joinOverlay) joinOverlay.style.display = "none";
+    return;
+  }
+
+  if (joinMode === "PVP") {
+    const tableId = (tableInput?.value || "").trim().slice(0, 24);
+    if (!tableId) { alert("Enter a table code."); return; }
+    socket.emit("join_table", { tableId, name, vsAI: false });
+    if (joinOverlay) joinOverlay.style.display = "none";
+    return;
+  }
+
+  alert("Choose a mode first.");
+}
+
+if (joinForm) joinForm.addEventListener("submit", doJoinFromForm);
+if (setSailBtn) setSailBtn.onclick = doJoinFromForm;
+
+// ===== REST OF GAME UI =====
+
 // Top chips
 const tableLine = el("tableLine");
 const meLine = el("meLine");
@@ -56,13 +165,6 @@ const cTotal = el("cTotal");
 // Toast
 const toast = el("toast");
 
-// Join overlay
-const joinOverlay = el("joinOverlay");
-const nameInput = el("nameInput");
-const tableInput = el("tableInput");
-const vsAiInput = el("vsAiInput");
-const nameJoinBtn = el("nameJoinBtn");
-
 // GO modal
 const goModal = el("goModal");
 const goModalText = el("goModalText");
@@ -76,7 +178,7 @@ const gameModalNewMatch = el("gameModalNewMatch");
 
 let state = null;
 let lastGoSeenTs = 0;
-let lastGameOverShownKey = ""; // prevents re-showing modal on every state emit
+let lastGameOverShownKey = "";
 
 function cardValue(rank) {
   if (rank === "A") return 1;
@@ -127,6 +229,7 @@ function initTicksOnce() {
 }
 
 function setPegPosition(pegEl, score) {
+  if (!pegEl) return;
   const s = clamp(score, 0, 121);
   const pct = (s / 121) * 100;
   pegEl.style.left = `${pct}%`;
@@ -139,10 +242,8 @@ function playerName(p) {
 
 function renderBoard() {
   if (!state) return;
-
-  p1Label.textContent = state.players.PLAYER1 || "P1";
-  p2Label.textContent = state.players.PLAYER2 || "P2";
-
+  if (p1Label) p1Label.textContent = state.players.PLAYER1 || "P1";
+  if (p2Label) p2Label.textContent = state.players.PLAYER2 || "P2";
   setPegPosition(p1Peg, state.scores.PLAYER1);
   setPegPosition(p2Peg, state.scores.PLAYER2);
 }
@@ -159,13 +260,12 @@ function showModal(modalEl) {
   if (!modalEl) return;
   modalEl.classList.remove("hidden");
 }
-
 function hideModal(modalEl) {
   if (!modalEl) return;
   modalEl.classList.add("hidden");
 }
 
-// Sticky GO modal: show ONLY when opponent says GO (per your preference)
+// Sticky GO modal: show ONLY when opponent says GO
 function maybeShowGoModal() {
   const ge = state?.lastGoEvent;
   if (!ge || !ge.ts) return;
@@ -177,11 +277,11 @@ function maybeShowGoModal() {
   if (ge.player === state.me) return;
 
   const who = ge.player === state.me ? "You" : "Opponent";
-  goModalText.textContent = `${who} said GO`;
+  if (goModalText) goModalText.textContent = `${who} said GO`;
   showModal(goModal);
 }
 
-goModalOk.onclick = () => hideModal(goModal);
+if (goModalOk) goModalOk.onclick = () => hideModal(goModal);
 
 // Game over modal: show once per game end
 function maybeShowGameOverModal() {
@@ -196,29 +296,31 @@ function maybeShowGameOverModal() {
   const winnerName = playerName(state.gameWinner);
   if (state.matchOver) {
     const matchWinnerName = playerName(state.matchWinner);
-    gameModalText.textContent = `${winnerName} won this game.\n\n${matchWinnerName} wins the match (best of 3).`;
-    gameModalNewMatch.style.display = "inline-block";
-    gameModalNext.textContent = "Next Game";
+    if (gameModalText) gameModalText.textContent = `${winnerName} won this game.\n\n${matchWinnerName} wins the match (best of 3).`;
+    if (gameModalNewMatch) gameModalNewMatch.style.display = "inline-block";
+    if (gameModalNext) gameModalNext.textContent = "Next Game";
   } else {
-    gameModalText.textContent = `${winnerName} won this game.\n\nPress Next Game when you’re ready.`;
-    gameModalNewMatch.style.display = "none";
-    gameModalNext.textContent = "Next Game";
+    if (gameModalText) gameModalText.textContent = `${winnerName} won this game.\n\nPress Next Game when you’re ready.`;
+    if (gameModalNewMatch) gameModalNewMatch.style.display = "none";
+    if (gameModalNext) gameModalNext.textContent = "Next Game";
   }
-
   showModal(gameModal);
 }
 
-gameModalNext.onclick = () => {
-  hideModal(gameModal);
-  socket.emit("next_hand");
-};
-gameModalNewMatch.onclick = () => {
-  hideModal(gameModal);
-  socket.emit("new_match");
-};
+if (gameModalNext) {
+  gameModalNext.onclick = () => {
+    hideModal(gameModal);
+    socket.emit("next_hand");
+  };
+}
+if (gameModalNewMatch) {
+  gameModalNewMatch.onclick = () => {
+    hideModal(gameModal);
+    socket.emit("new_match");
+  };
+}
 
 function clearPeggingHudForShow() {
-  // When we reach SHOW, we do NOT want stale pegging visuals.
   if (countNum) countNum.textContent = "0";
   if (pileArea) pileArea.innerHTML = "";
   if (peggingStatus) peggingStatus.textContent = "";
@@ -228,39 +330,41 @@ function clearPeggingHudForShow() {
 function renderPileAndHud() {
   if (!state) return;
 
-  countNum.textContent = String(state.peg?.count ?? 0);
+  if (countNum) countNum.textContent = String(state.peg?.count ?? 0);
 
-  pileArea.innerHTML = "";
-  const pile = state.peg?.pile || [];
-  const show = pile.length > 10 ? pile.slice(pile.length - 10) : pile;
-  for (const c of show) {
-    pileArea.appendChild(makeCardButton(c, { disabled: true }));
+  if (pileArea) {
+    pileArea.innerHTML = "";
+    const pile = state.peg?.pile || [];
+    const show = pile.length > 10 ? pile.slice(pile.length - 10) : pile;
+    for (const c of show) {
+      pileArea.appendChild(makeCardButton(c, { disabled: true }));
+    }
   }
 
   if (state.stage !== "pegging") {
-    peggingStatus.textContent = "";
-    lastScore.classList.add("hidden");
+    if (peggingStatus) peggingStatus.textContent = "";
+    if (lastScore) lastScore.classList.add("hidden");
     return;
   }
 
   const myTurn = state.turn === state.me;
-  peggingStatus.textContent = myTurn ? "Your turn" : "Opponent’s turn";
+  if (peggingStatus) peggingStatus.textContent = myTurn ? "Your turn" : "Opponent’s turn";
 
   const ev = state.lastPegEvent;
-  if (ev && ev.pts && ev.pts > 0) {
+  if (ev && ev.pts && ev.pts > 0 && lastScore) {
     const who = (ev.player === state.me) ? "You" : "Opponent";
     const reasonText = (ev.reasons || []).join(", ");
     lastScore.textContent = `${who} scored +${ev.pts} (${reasonText})`;
     lastScore.classList.remove("hidden");
-  } else {
+  } else if (lastScore) {
     lastScore.classList.add("hidden");
   }
 
-  // Sticky GO modal
   maybeShowGoModal();
 }
 
 function renderBreakdown(listEl, breakdown) {
+  if (!listEl) return;
   listEl.innerHTML = "";
   if (!breakdown || !breakdown.items || breakdown.items.length === 0) {
     const li = document.createElement("li");
@@ -277,99 +381,103 @@ function renderBreakdown(listEl, breakdown) {
 
 function renderShow() {
   if (!state || state.stage !== "show" || !state.show) {
-    showPanel.classList.add("hidden");
+    if (showPanel) showPanel.classList.add("hidden");
     return;
   }
-  showPanel.classList.remove("hidden");
+  if (showPanel) showPanel.classList.remove("hidden");
 
   const cut = state.show.cut;
-  cutLine.textContent = `Cut: ${cut.rank}${cut.suit}`;
+  if (cutLine) cutLine.textContent = `Cut: ${cut.rank}${cut.suit}`;
 
   const nonDealer = state.show.nonDealer;
   const dealer = state.show.dealer;
 
-  ndTitle.textContent = `Non-dealer (${playerName(nonDealer)})`;
-  dTitle.textContent = `Dealer (${playerName(dealer)})`;
-  cTitle.textContent = `Crib (${playerName(dealer)})`;
+  if (ndTitle) ndTitle.textContent = `Non-dealer (${playerName(nonDealer)})`;
+  if (dTitle) dTitle.textContent = `Dealer (${playerName(dealer)})`;
+  if (cTitle) cTitle.textContent = `Crib (${playerName(dealer)})`;
 
-  ndCards.innerHTML = "";
-  dCards.innerHTML = "";
-  cCards.innerHTML = "";
+  if (ndCards) ndCards.innerHTML = "";
+  if (dCards) dCards.innerHTML = "";
+  if (cCards) cCards.innerHTML = "";
 
   const nd = state.show.hand[nonDealer];
   const de = state.show.hand[dealer];
   const cr = state.show.crib;
 
-  for (const c of nd.cards) ndCards.appendChild(makeCardButton(c, { disabled: true }));
-  ndCards.appendChild(makeCardButton(cut, { disabled: true }));
+  if (ndCards) {
+    for (const c of nd.cards) ndCards.appendChild(makeCardButton(c, { disabled: true }));
+    ndCards.appendChild(makeCardButton(cut, { disabled: true }));
+  }
 
-  for (const c of de.cards) dCards.appendChild(makeCardButton(c, { disabled: true }));
-  dCards.appendChild(makeCardButton(cut, { disabled: true }));
+  if (dCards) {
+    for (const c of de.cards) dCards.appendChild(makeCardButton(c, { disabled: true }));
+    dCards.appendChild(makeCardButton(cut, { disabled: true }));
+  }
 
-  for (const c of cr.cards) cCards.appendChild(makeCardButton(c, { disabled: true }));
-  cCards.appendChild(makeCardButton(cut, { disabled: true }));
+  if (cCards) {
+    for (const c of cr.cards) cCards.appendChild(makeCardButton(c, { disabled: true }));
+    cCards.appendChild(makeCardButton(cut, { disabled: true }));
+  }
 
   renderBreakdown(ndBreak, nd.breakdown);
   renderBreakdown(dBreak, de.breakdown);
   renderBreakdown(cBreak, cr.breakdown);
 
-  ndTotal.textContent = `Total: ${nd.breakdown.total}`;
-  dTotal.textContent = `Total: ${de.breakdown.total}`;
-  cTotal.textContent = `Total: ${cr.breakdown.total}`;
+  if (ndTotal) ndTotal.textContent = `Total: ${nd.breakdown.total}`;
+  if (dTotal) dTotal.textContent = `Total: ${de.breakdown.total}`;
+  if (cTotal) cTotal.textContent = `Total: ${cr.breakdown.total}`;
 }
 
 function render() {
   if (!state) return;
 
-  tableLine.textContent = `Table: ${state.tableId}`;
-  meLine.textContent = `You: ${playerName(state.me)}`;
+  if (tableLine) tableLine.textContent = `Table: ${state.tableId}`;
+  if (meLine) meLine.textContent = `You: ${playerName(state.me)}`;
 
   const p1 = state.players.PLAYER1 ? state.players.PLAYER1 : "—";
   const p2 = state.players.PLAYER2 ? state.players.PLAYER2 : "—";
-  playersLine.textContent = `Players: ${p1} vs ${p2}`;
+  if (playersLine) playersLine.textContent = `Players: ${p1} vs ${p2}`;
 
-  stageLine.textContent = `Stage: ${state.stage}`;
-  dealerLine.textContent = `Dealer: ${playerName(state.dealer)}`;
-  turnLine.textContent = `Turn: ${playerName(state.turn)}`;
+  if (stageLine) stageLine.textContent = `Stage: ${state.stage}`;
+  if (dealerLine) dealerLine.textContent = `Dealer: ${playerName(state.dealer)}`;
+  if (turnLine) turnLine.textContent = `Turn: ${playerName(state.turn)}`;
 
-  scoreLine.textContent = `${p1} ${state.scores.PLAYER1} • ${p2} ${state.scores.PLAYER2}`;
+  if (scoreLine) scoreLine.textContent = `${p1} ${state.scores.PLAYER1} • ${p2} ${state.scores.PLAYER2}`;
 
   const mw1 = state.matchWins?.PLAYER1 ?? 0;
   const mw2 = state.matchWins?.PLAYER2 ?? 0;
-  matchLine.textContent = `Match (best of 3): ${p1} ${mw1} • ${p2} ${mw2}`;
+  if (matchLine) matchLine.textContent = `Match (best of 3): ${p1} ${mw1} • ${p2} ${mw2}`;
 
-  cribLine.textContent =
-    `Crib (${playerName(state.dealer)}) • Discards: ${p1} ${state.discardsCount.PLAYER1}/2  ${p2} ${state.discardsCount.PLAYER2}/2`;
+  if (cribLine) {
+    cribLine.textContent =
+      `Crib (${playerName(state.dealer)}) • Discards: ${p1} ${state.discardsCount.PLAYER1}/2  ${p2} ${state.discardsCount.PLAYER2}/2`;
+  }
 
   initTicksOnce();
   renderBoard();
-
-  // Always render pile/HUD normally (it clears itself if not pegging)
   renderPileAndHud();
   renderShow();
 
-  // buttons
-  discardBtn.style.display = "none";
-  goBtn.style.display = "none";
-  nextHandBtn.style.display = "none";
-  newMatchBtn.style.display = "none";
+  if (discardBtn) discardBtn.style.display = "none";
+  if (goBtn) goBtn.style.display = "none";
+  if (nextHandBtn) nextHandBtn.style.display = "none";
+  if (newMatchBtn) newMatchBtn.style.display = "none";
 
-  handArea.innerHTML = "";
+  if (handArea) handArea.innerHTML = "";
 
-  // STAGES
   if (state.stage === "lobby") {
-    handTitle.textContent = "Waiting for crew…";
-    handHelp.textContent = `If this is 2-player, open the same table code on the other device: "${state.tableId}".`;
-    showPanel.classList.add("hidden");
+    if (handTitle) handTitle.textContent = "Waiting for crew…";
+    if (handHelp) handHelp.textContent = `If this is 2-player, open the same table code on the other device: "${state.tableId}".`;
+    if (showPanel) showPanel.classList.add("hidden");
     return;
   }
 
   if (state.stage === "discard") {
-    showPanel.classList.add("hidden");
+    if (showPanel) showPanel.classList.add("hidden");
 
     const cribOwner = playerName(state.dealer);
-    handTitle.textContent = "Your Hand";
-    handHelp.textContent = `Click a card to send it to ${cribOwner}'s crib (send 2 total).`;
+    if (handTitle) handTitle.textContent = "Your Hand";
+    if (handHelp) handHelp.textContent = `Click a card to send it to ${cribOwner}'s crib (send 2 total).`;
 
     const myHand = state.myHand || [];
     myHand.forEach(card => {
@@ -381,14 +489,13 @@ function render() {
       });
       handArea.appendChild(btn);
     });
-
     return;
   }
 
   if (state.stage === "pegging") {
-    showPanel.classList.add("hidden");
-    handTitle.textContent = "Pegging";
-    handHelp.textContent = "Play a card without exceeding 31. If you can’t play, press GO.";
+    if (showPanel) showPanel.classList.add("hidden");
+    if (handTitle) handTitle.textContent = "Pegging";
+    if (handHelp) handHelp.textContent = "Play a card without exceeding 31. If you can’t play, press GO.";
 
     const myTurn = state.turn === state.me;
     const myHand = state.myHand || [];
@@ -404,7 +511,7 @@ function render() {
     });
 
     const canPlay = myHand.some(c => count + cardValue(c.rank) <= 31);
-    if (myTurn && myHand.length > 0 && !canPlay) {
+    if (myTurn && myHand.length > 0 && !canPlay && goBtn) {
       goBtn.style.display = "inline-block";
       goBtn.onclick = () => socket.emit("go");
     }
@@ -412,58 +519,41 @@ function render() {
   }
 
   if (state.stage === "show") {
-    // ✅ IMPORTANT: Clear pegging visuals so they don't "stick" into SHOW.
+    // clear stale pegging visuals
     clearPeggingHudForShow();
 
-    handTitle.textContent = "Show";
-    handHelp.textContent = state.gameOver
-      ? `${playerName(state.gameWinner)} won this game.`
-      : "Review scoring. Click Next Hand when ready.";
-
-    nextHandBtn.style.display = "inline-block";
-    nextHandBtn.onclick = () => socket.emit("next_hand");
-
-    if (state.matchOver) {
-      newMatchBtn.style.display = "inline-block";
-      newMatchBtn.onclick = () => socket.emit("new_match");
-      handHelp.textContent = `${playerName(state.matchWinner)} wins the match (best of 3).`;
+    if (handTitle) handTitle.textContent = "Show";
+    if (handHelp) {
+      handHelp.textContent = state.gameOver
+        ? `${playerName(state.gameWinner)} won this game.`
+        : "Review scoring. Click Next Hand when ready.";
     }
 
-    // ✅ Replace the old "hand cards" with a simple message to avoid repetition.
-    handArea.innerHTML = "";
-    const msg = document.createElement("div");
-    msg.className = "mutedSmall";
-    msg.style.padding = "6px 2px";
-    msg.textContent = "See scoring below.";
-    handArea.appendChild(msg);
+    if (nextHandBtn) {
+      nextHandBtn.style.display = "inline-block";
+      nextHandBtn.onclick = () => socket.emit("next_hand");
+    }
 
-    // Sticky game-over modal
+    if (state.matchOver && newMatchBtn) {
+      newMatchBtn.style.display = "inline-block";
+      newMatchBtn.onclick = () => socket.emit("new_match");
+      if (handHelp) handHelp.textContent = `${playerName(state.matchWinner)} wins the match (best of 3).`;
+    }
+
+    // Replace old hand cards with message
+    if (handArea) {
+      handArea.innerHTML = "";
+      const msg = document.createElement("div");
+      msg.className = "mutedSmall";
+      msg.style.padding = "6px 2px";
+      msg.textContent = "See scoring below.";
+      handArea.appendChild(msg);
+    }
+
     maybeShowGameOverModal();
-
     return;
   }
 }
-
-// JOIN FLOW
-function doJoin() {
-  const name = (nameInput.value || "").trim().slice(0, 16);
-  const tableId = (tableInput.value || "").trim().slice(0, 24);
-  const vsAI = !!vsAiInput?.checked;
-
-  if (!name) { alert("Enter a name."); return; }
-  if (!tableId) { alert("Enter a table code."); return; }
-
-  socket.emit("join_table", { tableId, name, vsAI });
-  joinOverlay.style.display = "none";
-}
-
-nameJoinBtn.onclick = doJoin;
-nameInput.addEventListener("keydown", (e)=>{ if (e.key === "Enter") doJoin(); });
-tableInput.addEventListener("keydown", (e)=>{ if (e.key === "Enter") doJoin(); });
-
-socket.on("connect", () => {
-  // idle until Set Sail
-});
 
 socket.on("state", (s) => {
   state = s;

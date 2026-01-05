@@ -1,4 +1,4 @@
-// FILE 2/2 — public/js/app.js (FULL)
+// public/js/app.js
 const socket = io();
 const el = (id) => document.getElementById(id);
 
@@ -62,6 +62,7 @@ const nameInput = el("nameInput");
 const tableInput = el("tableInput");
 const vsAiInput = el("vsAiInput");
 const nameJoinBtn = el("nameJoinBtn");
+const joinForm = el("joinForm");
 
 // GO modal
 const goModal = el("goModal");
@@ -80,7 +81,7 @@ let lastGameOverShownKey = ""; // prevents re-showing modal on every state emit
 
 function cardValue(rank) {
   if (rank === "A") return 1;
-  if (["K", "Q", "J"].includes(rank)) return 10;
+  if (["K","Q","J"].includes(rank)) return 10;
   return parseInt(rank, 10);
 }
 
@@ -112,9 +113,7 @@ function makeCardButton(card, opts = {}) {
   return btn;
 }
 
-function clamp(n, min, max) {
-  return Math.max(min, Math.min(max, n));
-}
+function clamp(n, min, max) { return Math.max(min, Math.min(max, n)); }
 
 function initTicksOnce() {
   if (!ticks) return;
@@ -189,7 +188,11 @@ function maybeShowGameOverModal() {
   if (state.stage !== "show") return;
   if (!state.gameOver) return;
 
-  const key = `${state.tableId}|${state.matchWins?.PLAYER1 ?? 0}|${state.matchWins?.PLAYER2 ?? 0}|${state.scores?.PLAYER1 ?? 0}|${state.scores?.PLAYER2 ?? 0}|${state.gameWinner ?? ""}|${state.matchOver ? "M" : "G"}`;
+  const key =
+    `${state.tableId}|${state.matchWins?.PLAYER1 ?? 0}|${state.matchWins?.PLAYER2 ?? 0}|` +
+    `${state.scores?.PLAYER1 ?? 0}|${state.scores?.PLAYER2 ?? 0}|${state.gameWinner ?? ""}|` +
+    `${state.matchOver ? "M" : "G"}`;
+
   if (key === lastGameOverShownKey) return;
   lastGameOverShownKey = key;
 
@@ -248,7 +251,6 @@ function renderPileAndHud() {
     lastScore.classList.add("hidden");
   }
 
-  // Sticky GO modal
   maybeShowGoModal();
 }
 
@@ -307,7 +309,6 @@ function renderShow() {
 
   ndTotal.textContent = `Total: ${nd.breakdown.total}`;
   dTotal.textContent = `Total: ${de.breakdown.total}`;
-  cTotal.textContent = `Total: ${de.breakdown.total}`;
   cTotal.textContent = `Total: ${cr.breakdown.total}`;
 }
 
@@ -421,9 +422,7 @@ function render() {
     myHand.forEach(card => handArea.appendChild(makeCardButton(card, { disabled: true })));
     if (state.cut) handArea.appendChild(makeCardButton(state.cut, { disabled: true }));
 
-    // Sticky game-over modal
     maybeShowGameOverModal();
-
     return;
   }
 }
@@ -441,39 +440,69 @@ function doJoin() {
   joinOverlay.style.display = "none";
 }
 
-// FORCE BLANK JOIN FIELDS (every load, every restore)
-(function initJoinDefaults() {
-  function blankJoinFields() {
-    if (nameInput) nameInput.value = "";
-    if (tableInput) tableInput.value = "";
-    if (vsAiInput) vsAiInput.checked = false;
-
-    // Some mobile browsers "restore" form state even when value is blanked.
-    // Clearing defaultValue helps prevent that restore.
-    if (nameInput) nameInput.defaultValue = "";
-    if (tableInput) tableInput.defaultValue = "";
-
-    // Nuke any stored draft values Safari might keep for this origin.
+/**
+ * PERMANENT SAFARI FIX:
+ * iOS Safari "restores" form values by matching prior field identity (id/name/etc).
+ * We keep stable ids for JS, but randomize NAME each load so Safari cannot restore.
+ * Then we blank repeatedly on restore events.
+ */
+(function killAutofillForever(){
+  function rand() {
     try {
-      sessionStorage.removeItem("nameInput");
-      sessionStorage.removeItem("tableInput");
-    } catch (_) {}
+      const a = new Uint32Array(2);
+      crypto.getRandomValues(a);
+      return `${a[0].toString(16)}${a[1].toString(16)}`;
+    } catch {
+      return `${Math.random().toString(16).slice(2)}${Date.now().toString(16)}`;
+    }
   }
 
-  blankJoinFields();
+  function hardBlank() {
+    if (!nameInput || !tableInput) return;
 
-  // iOS/Safari back-forward cache restore
-  window.addEventListener("pageshow", blankJoinFields);
+    // Randomize field identity each time (Safari can't match past saved value)
+    nameInput.setAttribute("name", `pirate_name_${rand()}`);
+    tableInput.setAttribute("name", `pirate_table_${rand()}`);
 
-  // extra passes (Safari sometimes fills after first paint)
-  setTimeout(blankJoinFields, 50);
-  setTimeout(blankJoinFields, 250);
-  setTimeout(blankJoinFields, 800);
+    // Aggressively prevent autofill/restore
+    nameInput.setAttribute("autocomplete", "off");
+    tableInput.setAttribute("autocomplete", "off");
+
+    // Clear BOTH value and defaultValue (Safari sometimes uses defaultValue on restore)
+    nameInput.value = "";
+    tableInput.value = "";
+    nameInput.defaultValue = "";
+    tableInput.defaultValue = "";
+
+    if (vsAiInput) vsAiInput.checked = false;
+
+    // If wrapped in a form, reset too (extra belt+suspenders)
+    if (joinForm && typeof joinForm.reset === "function") joinForm.reset();
+  }
+
+  // Run immediately + multiple delayed passes (beats late restore)
+  hardBlank();
+  setTimeout(hardBlank, 0);
+  setTimeout(hardBlank, 50);
+  setTimeout(hardBlank, 250);
+  setTimeout(hardBlank, 800);
+
+  // On iOS, pageshow fires on back/forward cache restores
+  window.addEventListener("pageshow", hardBlank);
+
+  // Some restores happen when tab becomes visible again
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) hardBlank();
+  });
+
+  // If Safari tries to inject on focus, wipe again
+  nameInput?.addEventListener("focus", () => setTimeout(hardBlank, 0));
+  tableInput?.addEventListener("focus", () => setTimeout(hardBlank, 0));
 })();
 
 nameJoinBtn.onclick = doJoin;
-nameInput.addEventListener("keydown", (e) => { if (e.key === "Enter") doJoin(); });
-tableInput.addEventListener("keydown", (e) => { if (e.key === "Enter") doJoin(); });
+nameInput.addEventListener("keydown", (e)=>{ if (e.key === "Enter") doJoin(); });
+tableInput.addEventListener("keydown", (e)=>{ if (e.key === "Enter") doJoin(); });
 
 socket.on("connect", () => {
   // idle until Set Sail

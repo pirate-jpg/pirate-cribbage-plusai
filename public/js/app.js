@@ -19,6 +19,7 @@ const cribLine = el("cribLine");
 const handTitle = el("handTitle");
 const handHelp = el("handHelp");
 const handArea = el("handArea");
+const handBlockLabel = el("handBlockLabel");
 const discardBtn = el("discardBtn");
 const goBtn = el("goBtn");
 const nextHandBtn = el("nextHandBtn");
@@ -56,12 +57,22 @@ const cTotal = el("cTotal");
 // Toast
 const toast = el("toast");
 
-// Join overlay (if present)
+// Join overlay
 const joinOverlay = el("joinOverlay");
 const nameInput = el("nameInput");
 const tableInput = el("tableInput");
-const vsAiInput = el("vsAiInput");
 const nameJoinBtn = el("nameJoinBtn");
+
+// New mode UI IDs (from index.html)
+const joinForm = el("joinForm");
+const joinTopHelp = el("joinTopHelp");
+const modePanel = el("modePanel");
+const entryPanel = el("entryPanel");
+const modeAiBtn = el("modeAiBtn");
+const modePvpBtn = el("modePvpBtn");
+const backBtn = el("backBtn");
+const entryHint = el("entryHint");
+const tableRow = el("tableRow");
 
 // GO modal
 const goModal = el("goModal");
@@ -140,11 +151,11 @@ function playerName(p) {
 function renderBoard() {
   if (!state) return;
 
-  p1Label.textContent = state.players.PLAYER1 || "P1";
-  p2Label.textContent = state.players.PLAYER2 || "P2";
+  if (p1Label) p1Label.textContent = state.players.PLAYER1 || "P1";
+  if (p2Label) p2Label.textContent = state.players.PLAYER2 || "P2";
 
-  setPegPosition(p1Peg, state.scores.PLAYER1);
-  setPegPosition(p2Peg, state.scores.PLAYER2);
+  if (p1Peg) setPegPosition(p1Peg, state.scores.PLAYER1);
+  if (p2Peg) setPegPosition(p2Peg, state.scores.PLAYER2);
 }
 
 function showToast(msg) {
@@ -165,7 +176,7 @@ function hideModal(modalEl) {
   modalEl.classList.add("hidden");
 }
 
-// Sticky GO modal: show ONLY when opponent says GO (per your preference)
+// Sticky GO modal: show ONLY when opponent says GO
 function maybeShowGoModal() {
   const ge = state?.lastGoEvent;
   if (!ge || !ge.ts) return;
@@ -177,7 +188,7 @@ function maybeShowGoModal() {
   if (ge.player === state.me) return;
 
   const who = ge.player === state.me ? "You" : "Opponent";
-  goModalText.textContent = `${who} said GO`;
+  if (goModalText) goModalText.textContent = `${who} said GO`;
   showModal(goModal);
 }
 
@@ -194,15 +205,17 @@ function maybeShowGameOverModal() {
   lastGameOverShownKey = key;
 
   const winnerName = playerName(state.gameWinner);
-  if (state.matchOver) {
-    const matchWinnerName = playerName(state.matchWinner);
-    gameModalText.textContent = `${winnerName} won this game.\n\n${matchWinnerName} wins the match (best of 3).`;
-    gameModalNewMatch.style.display = "inline-block";
-    gameModalNext.textContent = "Next Game";
-  } else {
-    gameModalText.textContent = `${winnerName} won this game.\n\nPress Next Game when you’re ready.`;
-    gameModalNewMatch.style.display = "none";
-    gameModalNext.textContent = "Next Game";
+  if (gameModalText) {
+    if (state.matchOver) {
+      const matchWinnerName = playerName(state.matchWinner);
+      gameModalText.textContent = `${winnerName} won this game.\n\n${matchWinnerName} wins the match (best of 3).`;
+      if (gameModalNewMatch) gameModalNewMatch.style.display = "inline-block";
+      if (gameModalNext) gameModalNext.textContent = "Next Game";
+    } else {
+      gameModalText.textContent = `${winnerName} won this game.\n\nPress Next Game when you’re ready.`;
+      if (gameModalNewMatch) gameModalNewMatch.style.display = "none";
+      if (gameModalNext) gameModalNext.textContent = "Next Game";
+    }
   }
 
   showModal(gameModal);
@@ -232,7 +245,6 @@ function clearPeggingPanelsForShowOrNonPegging() {
 function renderPileAndHud() {
   if (!state) return;
 
-  // Always show count number (kept), but clear pile cards unless actively pegging.
   if (countNum) countNum.textContent = String(state.peg?.count ?? 0);
 
   if (state.stage !== "pegging") {
@@ -265,11 +277,11 @@ function renderPileAndHud() {
     if (lastScore) lastScore.classList.add("hidden");
   }
 
-  // Sticky GO modal
   maybeShowGoModal();
 }
 
 function renderBreakdown(listEl, breakdown) {
+  if (!listEl) return;
   listEl.innerHTML = "";
   if (!breakdown || !breakdown.items || breakdown.items.length === 0) {
     const li = document.createElement("li");
@@ -309,14 +321,20 @@ function renderShow() {
   const de = state.show.hand[dealer];
   const cr = state.show.crib;
 
-  for (const c of nd.cards) ndCards.appendChild(makeCardButton(c, { disabled: true }));
-  ndCards.appendChild(makeCardButton(cut, { disabled: true }));
+  if (ndCards) {
+    for (const c of nd.cards) ndCards.appendChild(makeCardButton(c, { disabled: true }));
+    ndCards.appendChild(makeCardButton(cut, { disabled: true }));
+  }
 
-  for (const c of de.cards) dCards.appendChild(makeCardButton(c, { disabled: true }));
-  dCards.appendChild(makeCardButton(cut, { disabled: true }));
+  if (dCards) {
+    for (const c of de.cards) dCards.appendChild(makeCardButton(c, { disabled: true }));
+    dCards.appendChild(makeCardButton(cut, { disabled: true }));
+  }
 
-  for (const c of cr.cards) cCards.appendChild(makeCardButton(c, { disabled: true }));
-  cCards.appendChild(makeCardButton(cut, { disabled: true }));
+  if (cCards) {
+    for (const c of cr.cards) cCards.appendChild(makeCardButton(c, { disabled: true }));
+    cCards.appendChild(makeCardButton(cut, { disabled: true }));
+  }
 
   renderBreakdown(ndBreak, nd.breakdown);
   renderBreakdown(dBreak, de.breakdown);
@@ -331,14 +349,12 @@ function setNextHandProminence(on) {
   if (!nextHandBtn) return;
 
   if (on) {
-    // Make it visually "primary" and more obvious without touching CSS files.
     nextHandBtn.style.fontSize = "20px";
     nextHandBtn.style.padding = "14px 20px";
     nextHandBtn.style.fontWeight = "800";
     nextHandBtn.style.borderRadius = "14px";
-    nextHandBtn.style.minWidth = "170px";
+    nextHandBtn.style.minWidth = "190px";
   } else {
-    // reset
     nextHandBtn.style.fontSize = "";
     nextHandBtn.style.padding = "";
     nextHandBtn.style.fontWeight = "";
@@ -377,7 +393,7 @@ function render() {
   renderPileAndHud();
   renderShow();
 
-  // buttons
+  // buttons defaults
   if (discardBtn) discardBtn.style.display = "none";
   if (goBtn) goBtn.style.display = "none";
   if (nextHandBtn) nextHandBtn.style.display = "none";
@@ -385,11 +401,13 @@ function render() {
   setNextHandProminence(false);
 
   if (handArea) handArea.innerHTML = "";
+  if (handBlockLabel) handBlockLabel.textContent = "";
 
   // STAGES
   if (state.stage === "lobby") {
     if (handTitle) handTitle.textContent = "Waiting for crew…";
     if (handHelp) handHelp.textContent = `If this is 2-player, open the same table code on the other device: "${state.tableId}".`;
+    if (handBlockLabel) handBlockLabel.textContent = "";
     if (showPanel) showPanel.classList.add("hidden");
     return;
   }
@@ -398,8 +416,9 @@ function render() {
     if (showPanel) showPanel.classList.add("hidden");
 
     const cribOwner = playerName(state.dealer);
-    if (handTitle) handTitle.textContent = "Your Hand";
-    if (handHelp) handHelp.textContent = `Click a card to send it to ${cribOwner}'s crib (send 2 total).`;
+    if (handTitle) handTitle.textContent = "Discard";
+    if (handHelp) handHelp.textContent = `Tap 2 cards to send to ${cribOwner}'s crib.`;
+    if (handBlockLabel) handBlockLabel.textContent = "Your hand";
 
     const myHand = state.myHand || [];
     myHand.forEach(card => {
@@ -420,6 +439,7 @@ function render() {
 
     if (handTitle) handTitle.textContent = "Pegging";
     if (handHelp) handHelp.textContent = "Play a card without exceeding 31. If you can’t play, press GO.";
+    if (handBlockLabel) handBlockLabel.textContent = "Your hand";
 
     const myTurn = state.turn === state.me;
     const myHand = state.myHand || [];
@@ -445,8 +465,7 @@ function render() {
   }
 
   if (state.stage === "show") {
-    // ✅ REQUIRED: end-of-hand cleanup
-    // Clear "Cards played (this count)" block (pile) and clear hand block (cards).
+    // end-of-hand cleanup
     clearPeggingPanelsForShowOrNonPegging();
 
     if (handTitle) handTitle.textContent = "Show";
@@ -455,8 +474,9 @@ function render() {
         ? `${playerName(state.gameWinner)} won this game.`
         : "See scoring below.";
     }
+    if (handBlockLabel) handBlockLabel.textContent = "";
 
-    // ✅ Next Hand button more prominent
+    // Next Hand button more prominent
     if (nextHandBtn) {
       nextHandBtn.style.display = "inline-block";
       setNextHandProminence(true);
@@ -469,7 +489,7 @@ function render() {
       if (handHelp) handHelp.textContent = `${playerName(state.matchWinner)} wins the match (best of 3).`;
     }
 
-    // ✅ Clear handArea instead of re-showing the same cards above the scoring panel.
+    // Clear handArea and show message instead
     if (handArea) {
       handArea.innerHTML = "";
       const msg = document.createElement("div");
@@ -479,112 +499,98 @@ function render() {
       handArea.appendChild(msg);
     }
 
-    // Sticky game-over modal
     maybeShowGameOverModal();
     return;
   }
 }
 
-// JOIN FLOW (kept if your overlay still uses these IDs)
+// ===== JOIN FLOW (matches index.html mode UI) =====
+let joinMode = null; // "ai" | "pvp"
+
+function showModeChooser() {
+  joinMode = null;
+  if (modePanel) modePanel.style.display = "block";
+  if (entryPanel) entryPanel.style.display = "none";
+  if (joinTopHelp) joinTopHelp.textContent = "Choose a mode, then enter what's needed to start.";
+}
+
+function showEntry(mode) {
+  joinMode = mode;
+
+  if (modePanel) modePanel.style.display = "none";
+  if (entryPanel) entryPanel.style.display = "block";
+
+  if (mode === "ai") {
+    if (joinTopHelp) joinTopHelp.textContent = "VS AI: enter your name, then Set Sail.";
+    if (entryHint) entryHint.textContent = "Tip: vs AI doesn’t need a table code.";
+    if (tableRow) tableRow.style.display = "none";
+    if (tableInput) tableInput.value = "";
+  } else {
+    if (joinTopHelp) joinTopHelp.textContent = "VS Player: enter your name + a table code. Player 2 must enter the same table code.";
+    if (entryHint) entryHint.textContent = "Tip: both players must use the exact same table code.";
+    if (tableRow) tableRow.style.display = "block";
+  }
+
+  setTimeout(() => nameInput?.focus(), 50);
+}
+
 function doJoin() {
   const name = (nameInput?.value || "").trim().slice(0, 16);
-  const tableId = (tableInput?.value || "").trim().slice(0, 24);
-  const vsAI = !!vsAiInput?.checked;
+  const tableIdRaw = (tableInput?.value || "").trim().slice(0, 24);
 
-  if (!name) { alert("Enter a name."); return; }
-  if (!tableId && !vsAI) { alert("Enter a table code."); return; }
+  if (!joinMode) {
+    showToast("Choose a mode first.");
+    return;
+  }
+  if (!name) {
+    alert("Enter a name.");
+    nameInput?.focus();
+    return;
+  }
 
-  // If vsAI, allow empty tableId and let server decide a table or use name-based
+  const vsAI = (joinMode === "ai");
+  const tableId = vsAI ? "" : tableIdRaw;
+
+  if (!vsAI && !tableId) {
+    alert("Enter a table code.");
+    tableInput?.focus();
+    return;
+  }
+
   socket.emit("join_table", { tableId, name, vsAI });
+
   if (joinOverlay) joinOverlay.style.display = "none";
 }
 
-// Optional: do not force-blank fields here (because your current mode flow may differ)
-// If you still have the old single-screen overlay and want the force-blank behavior back,
-// tell me and I’ll re-add it safely.
+if (modeAiBtn) modeAiBtn.onclick = () => showEntry("ai");
+if (modePvpBtn) modePvpBtn.onclick = () => showEntry("pvp");
+if (backBtn) backBtn.onclick = () => showModeChooser();
 
-if (nameJoinBtn) nameJoinBtn.onclick = doJoin;
+// IMPORTANT: prevent submit reload
+if (joinForm) {
+  joinForm.addEventListener("submit", (e) => {
+    e.preventDefault();
+    doJoin();
+  });
+}
+
+// Backup wiring (in case someone clicks the Set Sail button directly)
+if (nameJoinBtn) nameJoinBtn.onclick = (e) => {
+  e?.preventDefault?.();
+  doJoin();
+};
+
 if (nameInput) nameInput.addEventListener("keydown", (e)=>{ if (e.key === "Enter") doJoin(); });
 if (tableInput) tableInput.addEventListener("keydown", (e)=>{ if (e.key === "Enter") doJoin(); });
+
+showModeChooser();
 
 socket.on("state", (s) => {
   state = s;
   render();
 });
 
-socket.on("error_msg", (msg) => alert(msg));
-// ---- FIX: wire up Option A mode buttons (Play vs AI / Play vs Player) ----
-(function wireModeButtons() {
-  if (!joinOverlay) return;
-
-  // Find the two mode buttons by their visible text
-  const buttons = Array.from(joinOverlay.querySelectorAll("button"));
-  const aiBtn = buttons.find(b => /play\s*vs\s*ai/i.test((b.textContent || "").trim()));
-  const pvpBtn = buttons.find(b => /play\s*vs\s*player/i.test((b.textContent || "").trim()));
-
-  // Helpers to show/hide the table row safely
-  function setTableRowVisible(visible) {
-    if (!tableInput) return;
-    const row =
-      tableInput.closest(".overlayRow") ||
-      tableInput.closest("label") ||
-      tableInput.parentElement;
-    if (row) row.style.display = visible ? "" : "none";
-  }
-
-  function setHelpText(text) {
-    // Your overlay has a help line; if you have an element for it, set it here.
-    // This tries to find a <p> inside the overlay that contains "Choose a mode" or "Tip:"
-    const ps = Array.from(joinOverlay.querySelectorAll("p"));
-    const target = ps.find(p => /choose a mode|tip:/i.test(p.textContent || ""));
-    if (target) target.textContent = text;
-  }
-
-  // Try to hide the mode-choice button panel after selection (if it exists)
-  function hideModeChoicePanel() {
-    // If you have a container around the two mode buttons, this will hide it.
-    // We find the nearest common parent that contains both buttons.
-    if (!aiBtn || !pvpBtn) return;
-    let parent = aiBtn.parentElement;
-    while (parent && !parent.contains(pvpBtn)) parent = parent.parentElement;
-    if (parent) parent.style.display = "none";
-  }
-
-  function showJoinFields() {
-    // Ensure the inputs + Set Sail button are visible (if you had them hidden)
-    if (nameInput) nameInput.style.display = "";
-    if (nameJoinBtn) nameJoinBtn.style.display = "";
-    if (tableInput) tableInput.style.display = "";
-  }
-
-  function chooseMode(vsAI) {
-    if (vsAiInput) vsAiInput.checked = !!vsAI;
-
-    showJoinFields();
-    hideModeChoicePanel();
-
-    // AI mode: hide table input
-    setTableRowVisible(!vsAI);
-
-    // Clear any old values so Safari/autofill doesn't keep "helping"
-    if (nameInput) nameInput.value = "";
-    if (tableInput) tableInput.value = "";
-
-    setHelpText(vsAI
-      ? "VS AI: enter your name, then Set Sail."
-      : "VS Player: enter your name + a table code. Player 2 must enter the same table code."
-    );
-
-    // Focus the right field
-    setTimeout(() => {
-      if (nameInput) nameInput.focus();
-    }, 50);
-  }
-
-  if (aiBtn) {
-    aiBtn.addEventListener("click", () => chooseMode(true));
-  }
-  if (pvpBtn) {
-    pvpBtn.addEventListener("click", () => chooseMode(false));
-  }
-})();
+socket.on("error_msg", (msg) => {
+  if (joinOverlay) joinOverlay.style.display = "block";
+  showToast(msg);
+});

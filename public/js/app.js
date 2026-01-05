@@ -1,4 +1,4 @@
-// public/js/app.js
+// FILE 2/2 — public/js/app.js (FULL)
 const socket = io();
 const el = (id) => document.getElementById(id);
 
@@ -307,6 +307,7 @@ function renderShow() {
 
   ndTotal.textContent = `Total: ${nd.breakdown.total}`;
   dTotal.textContent = `Total: ${de.breakdown.total}`;
+  cTotal.textContent = `Total: ${de.breakdown.total}`;
   cTotal.textContent = `Total: ${cr.breakdown.total}`;
 }
 
@@ -441,22 +442,38 @@ function doJoin() {
 }
 
 // FORCE BLANK JOIN FIELDS (every load, every restore)
-(function initJoinDefaults(){
+(function initJoinDefaults() {
   function blankJoinFields() {
     if (nameInput) nameInput.value = "";
     if (tableInput) tableInput.value = "";
     if (vsAiInput) vsAiInput.checked = false;
+
+    // Some mobile browsers "restore" form state even when value is blanked.
+    // Clearing defaultValue helps prevent that restore.
+    if (nameInput) nameInput.defaultValue = "";
+    if (tableInput) tableInput.defaultValue = "";
+
+    // Nuke any stored draft values Safari might keep for this origin.
+    try {
+      sessionStorage.removeItem("nameInput");
+      sessionStorage.removeItem("tableInput");
+    } catch (_) {}
   }
 
   blankJoinFields();
+
+  // iOS/Safari back-forward cache restore
   window.addEventListener("pageshow", blankJoinFields);
+
+  // extra passes (Safari sometimes fills after first paint)
   setTimeout(blankJoinFields, 50);
   setTimeout(blankJoinFields, 250);
+  setTimeout(blankJoinFields, 800);
 })();
 
 nameJoinBtn.onclick = doJoin;
-nameInput.addEventListener("keydown", (e)=>{ if (e.key === "Enter") doJoin(); });
-tableInput.addEventListener("keydown", (e)=>{ if (e.key === "Enter") doJoin(); });
+nameInput.addEventListener("keydown", (e) => { if (e.key === "Enter") doJoin(); });
+tableInput.addEventListener("keydown", (e) => { if (e.key === "Enter") doJoin(); });
 
 socket.on("connect", () => {
   // idle until Set Sail

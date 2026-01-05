@@ -29,12 +29,10 @@ function blankJoinFieldsHard() {
   if (nameInput) nameInput.value = "";
   if (tableInput) tableInput.value = "";
 
-  // defeat autofill: randomize "name" attributes each load
   const stamp = Date.now();
   if (nameInput) nameInput.setAttribute("name", `player_name_${stamp}`);
   if (tableInput) tableInput.setAttribute("name", `table_code_${stamp}`);
 
-  // also try to clear any browser restored values
   setTimeout(() => {
     if (nameInput) nameInput.value = "";
     if (tableInput) tableInput.value = "";
@@ -77,11 +75,9 @@ if (modeAiBtn) modeAiBtn.onclick = () => showFieldsStep("AI");
 if (modePvpBtn) modePvpBtn.onclick = () => showFieldsStep("PVP");
 if (backBtn) backBtn.onclick = () => showModeStep();
 
-// Always start on mode screen, always blank fields on load/restore
 showModeStep();
 window.addEventListener("pageshow", showModeStep);
 
-// Join submit
 function doJoinFromForm(e) {
   if (e) e.preventDefault();
 
@@ -128,6 +124,7 @@ const cribLine = el("cribLine");
 const handTitle = el("handTitle");
 const handHelp = el("handHelp");
 const handArea = el("handArea");
+const yourHandLabel = el("yourHandLabel"); // ✅ NEW
 const discardBtn = el("discardBtn");
 const goBtn = el("goBtn");
 const nextHandBtn = el("nextHandBtn");
@@ -179,6 +176,11 @@ const gameModalNewMatch = el("gameModalNewMatch");
 let state = null;
 let lastGoSeenTs = 0;
 let lastGameOverShownKey = "";
+
+function setYourHandLabelVisible(on) {
+  if (!yourHandLabel) return;
+  yourHandLabel.style.display = on ? "block" : "none";
+}
 
 function cardValue(rank) {
   if (rank === "A") return 1;
@@ -265,15 +267,12 @@ function hideModal(modalEl) {
   modalEl.classList.add("hidden");
 }
 
-// Sticky GO modal: show ONLY when opponent says GO
 function maybeShowGoModal() {
   const ge = state?.lastGoEvent;
   if (!ge || !ge.ts) return;
   if (ge.ts === lastGoSeenTs) return;
 
   lastGoSeenTs = ge.ts;
-
-  // Only show if opponent said GO
   if (ge.player === state.me) return;
 
   const who = ge.player === state.me ? "You" : "Opponent";
@@ -283,7 +282,6 @@ function maybeShowGoModal() {
 
 if (goModalOk) goModalOk.onclick = () => hideModal(goModal);
 
-// Game over modal: show once per game end
 function maybeShowGameOverModal() {
   if (!state) return;
   if (state.stage !== "show") return;
@@ -336,9 +334,7 @@ function renderPileAndHud() {
     pileArea.innerHTML = "";
     const pile = state.peg?.pile || [];
     const show = pile.length > 10 ? pile.slice(pile.length - 10) : pile;
-    for (const c of show) {
-      pileArea.appendChild(makeCardButton(c, { disabled: true }));
-    }
+    for (const c of show) pileArea.appendChild(makeCardButton(c, { disabled: true }));
   }
 
   if (state.stage !== "pegging") {
@@ -408,12 +404,10 @@ function renderShow() {
     for (const c of nd.cards) ndCards.appendChild(makeCardButton(c, { disabled: true }));
     ndCards.appendChild(makeCardButton(cut, { disabled: true }));
   }
-
   if (dCards) {
     for (const c of de.cards) dCards.appendChild(makeCardButton(c, { disabled: true }));
     dCards.appendChild(makeCardButton(cut, { disabled: true }));
   }
-
   if (cCards) {
     for (const c of cr.cards) cCards.appendChild(makeCardButton(c, { disabled: true }));
     cCards.appendChild(makeCardButton(cut, { disabled: true }));
@@ -466,6 +460,7 @@ function render() {
   if (handArea) handArea.innerHTML = "";
 
   if (state.stage === "lobby") {
+    setYourHandLabelVisible(false);
     if (handTitle) handTitle.textContent = "Waiting for crew…";
     if (handHelp) handHelp.textContent = `If this is 2-player, open the same table code on the other device: "${state.tableId}".`;
     if (showPanel) showPanel.classList.add("hidden");
@@ -473,26 +468,27 @@ function render() {
   }
 
   if (state.stage === "discard") {
+    setYourHandLabelVisible(true);
     if (showPanel) showPanel.classList.add("hidden");
 
     const cribOwner = playerName(state.dealer);
-    if (handTitle) handTitle.textContent = "Your Hand";
+    if (handTitle) handTitle.textContent = "Discard";
     if (handHelp) handHelp.textContent = `Click a card to send it to ${cribOwner}'s crib (send 2 total).`;
 
     const myHand = state.myHand || [];
     myHand.forEach(card => {
-      const btn = makeCardButton(card, {
+      handArea.appendChild(makeCardButton(card, {
         onClick: () => {
           socket.emit("discard_one", { cardId: card.id });
           showToast("Sent to crib");
         }
-      });
-      handArea.appendChild(btn);
+      }));
     });
     return;
   }
 
   if (state.stage === "pegging") {
+    setYourHandLabelVisible(true);
     if (showPanel) showPanel.classList.add("hidden");
     if (handTitle) handTitle.textContent = "Pegging";
     if (handHelp) handHelp.textContent = "Play a card without exceeding 31. If you can’t play, press GO.";
@@ -503,11 +499,10 @@ function render() {
 
     myHand.forEach(card => {
       const playable = myTurn && (count + cardValue(card.rank) <= 31);
-      const btn = makeCardButton(card, {
+      handArea.appendChild(makeCardButton(card, {
         disabled: !playable,
         onClick: () => socket.emit("play_card", { cardId: card.id })
-      });
-      handArea.appendChild(btn);
+      }));
     });
 
     const canPlay = myHand.some(c => count + cardValue(c.rank) <= 31);
@@ -519,7 +514,7 @@ function render() {
   }
 
   if (state.stage === "show") {
-    // clear stale pegging visuals
+    setYourHandLabelVisible(false);
     clearPeggingHudForShow();
 
     if (handTitle) handTitle.textContent = "Show";
@@ -540,7 +535,6 @@ function render() {
       if (handHelp) handHelp.textContent = `${playerName(state.matchWinner)} wins the match (best of 3).`;
     }
 
-    // Replace old hand cards with message
     if (handArea) {
       handArea.innerHTML = "";
       const msg = document.createElement("div");

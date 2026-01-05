@@ -513,3 +513,78 @@ socket.on("state", (s) => {
 });
 
 socket.on("error_msg", (msg) => alert(msg));
+// ---- FIX: wire up Option A mode buttons (Play vs AI / Play vs Player) ----
+(function wireModeButtons() {
+  if (!joinOverlay) return;
+
+  // Find the two mode buttons by their visible text
+  const buttons = Array.from(joinOverlay.querySelectorAll("button"));
+  const aiBtn = buttons.find(b => /play\s*vs\s*ai/i.test((b.textContent || "").trim()));
+  const pvpBtn = buttons.find(b => /play\s*vs\s*player/i.test((b.textContent || "").trim()));
+
+  // Helpers to show/hide the table row safely
+  function setTableRowVisible(visible) {
+    if (!tableInput) return;
+    const row =
+      tableInput.closest(".overlayRow") ||
+      tableInput.closest("label") ||
+      tableInput.parentElement;
+    if (row) row.style.display = visible ? "" : "none";
+  }
+
+  function setHelpText(text) {
+    // Your overlay has a help line; if you have an element for it, set it here.
+    // This tries to find a <p> inside the overlay that contains "Choose a mode" or "Tip:"
+    const ps = Array.from(joinOverlay.querySelectorAll("p"));
+    const target = ps.find(p => /choose a mode|tip:/i.test(p.textContent || ""));
+    if (target) target.textContent = text;
+  }
+
+  // Try to hide the mode-choice button panel after selection (if it exists)
+  function hideModeChoicePanel() {
+    // If you have a container around the two mode buttons, this will hide it.
+    // We find the nearest common parent that contains both buttons.
+    if (!aiBtn || !pvpBtn) return;
+    let parent = aiBtn.parentElement;
+    while (parent && !parent.contains(pvpBtn)) parent = parent.parentElement;
+    if (parent) parent.style.display = "none";
+  }
+
+  function showJoinFields() {
+    // Ensure the inputs + Set Sail button are visible (if you had them hidden)
+    if (nameInput) nameInput.style.display = "";
+    if (nameJoinBtn) nameJoinBtn.style.display = "";
+    if (tableInput) tableInput.style.display = "";
+  }
+
+  function chooseMode(vsAI) {
+    if (vsAiInput) vsAiInput.checked = !!vsAI;
+
+    showJoinFields();
+    hideModeChoicePanel();
+
+    // AI mode: hide table input
+    setTableRowVisible(!vsAI);
+
+    // Clear any old values so Safari/autofill doesn't keep "helping"
+    if (nameInput) nameInput.value = "";
+    if (tableInput) tableInput.value = "";
+
+    setHelpText(vsAI
+      ? "VS AI: enter your name, then Set Sail."
+      : "VS Player: enter your name + a table code. Player 2 must enter the same table code."
+    );
+
+    // Focus the right field
+    setTimeout(() => {
+      if (nameInput) nameInput.focus();
+    }, 50);
+  }
+
+  if (aiBtn) {
+    aiBtn.addEventListener("click", () => chooseMode(true));
+  }
+  if (pvpBtn) {
+    pvpBtn.addEventListener("click", () => chooseMode(false));
+  }
+})();

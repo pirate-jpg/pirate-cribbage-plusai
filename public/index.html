@@ -11,7 +11,7 @@
   <!-- TOAST -->
   <div id="toast" class="toast"></div>
 
-  <!-- GO MODAL (sticky + must dismiss) -->
+  <!-- GO MODAL -->
   <div id="goModal" class="modalOverlay hidden" role="dialog" aria-modal="true">
     <div class="modalCard">
       <div class="modalTitle">⚓ GO!</div>
@@ -20,7 +20,7 @@
     </div>
   </div>
 
-  <!-- GAME OVER MODAL (sticky) -->
+  <!-- GAME OVER MODAL -->
   <div id="gameModal" class="modalOverlay hidden" role="dialog" aria-modal="true">
     <div class="modalCard">
       <div class="modalTitle">🏁 Game Over</div>
@@ -32,30 +32,31 @@
     </div>
   </div>
 
-  <!-- JOIN OVERLAY (Option A: mode select then fields) -->
+  <!-- JOIN OVERLAY -->
   <div id="joinOverlay" class="overlay">
     <div class="panel overlayCard">
       <h2 class="overlayTitle">🏴‍☠️ Set Sail</h2>
-      <p id="joinSubtitle" class="overlayText">Choose a mode to start.</p>
+      <p id="joinTopHelp" class="overlayText">Choose a mode, then enter what's needed to start.</p>
 
-      <!-- STEP 1: MODE SELECT -->
-      <div id="modeStep">
-        <button id="modeAiBtn" class="btn primary big" style="width:100%;">Play vs AI</button>
-        <div style="height:12px;"></div>
-        <button id="modePvpBtn" class="btn primary big" style="width:100%;">Play vs Player</button>
+      <!-- MODE CHOOSER -->
+      <div id="modePanel" style="display:block;">
+        <button id="modeAiBtn" class="btn primary big" style="width:100%; margin-top:14px;">Play vs AI</button>
+        <button id="modePvpBtn" class="btn primary big" style="width:100%; margin-top:12px;">Play vs Player</button>
 
         <div class="overlayHint" style="margin-top:12px;">
-          vs AI: just your name • vs Player: name + shared table code
+          vs AI: just your name. &nbsp; • &nbsp; vs Player: name + shared table code.
         </div>
       </div>
 
-      <!-- STEP 2: FIELDS -->
-      <div id="fieldsStep" style="display:none;">
-        <!-- Wrap in a form; keep Safari from autofilling -->
-        <form id="joinForm" autocomplete="off" autocapitalize="off">
-          <!-- Decoy fields (helps defeat iOS/Safari autofill) -->
-          <input style="position:absolute;left:-9999px;top:-9999px" type="text" name="username" autocomplete="username">
-          <input style="position:absolute;left:-9999px;top:-9999px" type="password" name="password" autocomplete="current-password">
+      <!-- ENTRY PANEL -->
+      <div id="entryPanel" style="display:none; margin-top:8px;">
+        <!-- Wrap in a form; helps iOS behave a bit better -->
+        <form id="joinForm" autocomplete="off">
+          <!-- Decoy fields (helps defeat iOS autofill) -->
+          <input style="position:absolute; left:-9999px; top:-9999px; height:1px; width:1px; opacity:0;"
+                 type="text" name="username" autocomplete="username" />
+          <input style="position:absolute; left:-9999px; top:-9999px; height:1px; width:1px; opacity:0;"
+                 type="password" name="password" autocomplete="current-password" />
 
           <div class="overlayRow">
             <div class="overlayLabel">Your name</div>
@@ -64,39 +65,40 @@
               class="nameInput"
               maxlength="16"
               placeholder="Name"
-              inputmode="text"
               autocomplete="off"
               autocorrect="off"
               autocapitalize="words"
               spellcheck="false"
+              inputmode="text"
             />
           </div>
 
-          <div id="tableRow" class="overlayRow">
+          <div class="overlayRow" id="tableRow" style="display:none;">
             <div class="overlayLabel">Table code</div>
             <input
               id="tableInput"
               class="nameInput"
               maxlength="24"
               placeholder="Table code"
-              inputmode="text"
               autocomplete="off"
               autocorrect="off"
               autocapitalize="characters"
               spellcheck="false"
+              inputmode="text"
             />
             <div class="overlayHint" style="margin-top:8px;">
-              One player chooses a table code — the other player must enter the exact same code.
+              One player picks a table code. The other player must enter the exact same code.
             </div>
           </div>
 
-          <button id="setSailBtn" type="submit" class="btn primary big" style="width:100%; margin-top:10px;">Set Sail</button>
+          <button id="nameJoinBtn" type="submit" class="btn primary big" style="margin-top:14px;">Set Sail</button>
+
+          <div id="entryHint" class="overlayHint" style="margin-top:10px;"></div>
+
+          <button id="backBtn" type="button" class="btn primary big" style="width:100%; margin-top:12px;">Back</button>
         </form>
-
-        <div id="modeHint" class="overlayHint" style="margin-top:10px;"></div>
-
-        <button id="backBtn" class="btn primary big" style="width:100%; margin-top:10px;">Back</button>
       </div>
+
     </div>
   </div>
 
@@ -194,6 +196,10 @@
         </div>
 
         <div class="handBlock">
+          <!-- THIS is the label you want: inside the same block as the hand cards -->
+          <div id="handBlockLabel"
+               style="font-weight:700; margin:6px 0 10px 2px; opacity:.95;"></div>
+
           <div class="actionRow">
             <button id="discardBtn" class="btn primary" style="display:none;">Send to Crib</button>
             <button id="goBtn" class="btn go" style="display:none;">GO</button>
@@ -241,7 +247,6 @@
   </main>
 
   <script src="/socket.io/socket.io.js"></script>
-  <!-- cache-bust to reduce “I swear I deployed it” pain -->
-  <script src="/js/app.js?v=1"></script>
+  <script src="/js/app.js"></script>
 </body>
 </html>

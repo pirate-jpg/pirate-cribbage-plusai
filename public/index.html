@@ -8,10 +8,9 @@
 </head>
 
 <body>
-  <!-- TOAST (kept for non-critical notices) -->
   <div id="toast" class="toast"></div>
 
-  <!-- GO MODAL (sticky + must dismiss) -->
+  <!-- GO MODAL -->
   <div id="goModal" class="modalOverlay hidden" role="dialog" aria-modal="true">
     <div class="modalCard">
       <div class="modalTitle">⚓ GO!</div>
@@ -20,7 +19,7 @@
     </div>
   </div>
 
-  <!-- GAME OVER MODAL (sticky) -->
+  <!-- GAME OVER MODAL -->
   <div id="gameModal" class="modalOverlay hidden" role="dialog" aria-modal="true">
     <div class="modalCard">
       <div class="modalTitle">🏁 Game Over</div>
@@ -32,57 +31,74 @@
     </div>
   </div>
 
-  <!-- JOIN OVERLAY -->
+  <!-- JOIN OVERLAY (Option A: choose mode first) -->
   <div id="joinOverlay" class="overlay">
     <div class="panel overlayCard">
       <h2 class="overlayTitle">🏴‍☠️ Set Sail</h2>
-      <p class="overlayText">Enter your name and table to start.</p>
+      <p class="overlayText">Choose a mode, then enter what’s needed to start.</p>
 
-      <!-- Wrap in a form; keep Safari from "helping" -->
-      <form id="joinForm" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
-        <!-- Decoy fields (helps defeat autofill on iOS) -->
-        <input style="position:absolute;left:-9999px;top:-9999px;height:0;width:0;opacity:0"
-               type="text" name="username" autocomplete="username">
-        <input style="position:absolute;left:-9999px;top:-9999px;height:0;width:0;opacity:0"
-               type="password" name="password" autocomplete="current-password">
+      <form id="joinForm" autocomplete="off" novalidate>
+        <!-- Decoy fields to fight autofill -->
+        <input style="position:absolute; left:-9999px; width:1px; height:1px; opacity:0;"
+               type="text" name="username" autocomplete="username" />
+        <input style="position:absolute; left:-9999px; width:1px; height:1px; opacity:0;"
+               type="password" name="password" autocomplete="current-password" />
 
-        <div class="overlayRow">
-          <div class="overlayLabel">Your name</div>
-          <input
-            id="nameInput"
-            class="nameInput"
-            maxlength="16"
-            placeholder="Name"
-            inputmode="text"
-            autocomplete="off"
-            autocorrect="off"
-            autocapitalize="words"
-            spellcheck="false"
-          />
+        <!-- MODE SELECT -->
+        <div id="modeSelect" class="modeSelect">
+          <button type="button" id="modeAiBtn" class="btn primary big" style="width:100%;">Play vs AI</button>
+          <div style="height:10px;"></div>
+          <button type="button" id="modePvpBtn" class="btn primary big" style="width:100%;">Play vs Player</button>
+          <div class="overlayHint" style="margin-top:12px;">
+            vs AI: just your name. &nbsp;&nbsp;•&nbsp;&nbsp; vs Player: name + shared table code.
+          </div>
         </div>
 
-        <div class="overlayRow">
-          <div class="overlayLabel">Table</div>
-          <input
-            id="tableInput"
-            class="nameInput"
-            maxlength="24"
-            placeholder="Table"
-            inputmode="text"
-            autocomplete="off"
-            autocorrect="off"
-            autocapitalize="characters"
-            spellcheck="false"
-          />
+        <!-- INPUTS -->
+        <div id="joinFields" class="hidden">
+          <div class="overlayRow">
+            <div class="overlayLabel">Your name</div>
+            <input
+              id="nameInput"
+              class="nameInput"
+              maxlength="16"
+              placeholder="Name"
+              inputmode="text"
+              autocomplete="off"
+              autocorrect="off"
+              autocapitalize="words"
+              spellcheck="false"
+            />
+          </div>
+
+          <div class="overlayRow" id="tableRow">
+            <div class="overlayLabel">Table code</div>
+            <input
+              id="tableInput"
+              class="nameInput"
+              maxlength="24"
+              placeholder="Table code"
+              inputmode="text"
+              autocomplete="off"
+              autocorrect="off"
+              autocapitalize="characters"
+              spellcheck="false"
+            />
+          </div>
+
+          <!-- hidden; mode drives it -->
+          <input id="vsAiInput" type="checkbox" class="hidden" />
+
+          <button id="nameJoinBtn" type="submit" class="btn primary big">Set Sail</button>
+
+          <div id="joinHint" class="overlayHint">
+            Tip: Use the same table code on another device for 2-player.
+          </div>
+
+          <div style="margin-top:10px;">
+            <button type="button" id="backToModeBtn" class="btn" style="width:100%;">Back</button>
+          </div>
         </div>
-
-        <label class="overlayRow" style="display:flex; gap:10px; align-items:center; margin-top:10px;">
-          <input id="vsAiInput" type="checkbox" />
-          <span class="overlayText" style="margin:0;">Play vs AI</span>
-        </label>
-
-        <button id="nameJoinBtn" type="button" class="btn primary big">Set Sail</button>
-        <div class="overlayHint">Tip: use the same table code on another device for 2-player.</div>
       </form>
     </div>
   </div>

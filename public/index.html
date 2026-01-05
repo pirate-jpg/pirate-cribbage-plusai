@@ -32,38 +32,29 @@
     </div>
   </div>
 
-  <!-- JOIN OVERLAY (Mode → AI / PvP) -->
+  <!-- JOIN OVERLAY -->
   <div id="joinOverlay" class="overlay">
     <div class="panel overlayCard">
       <h2 class="overlayTitle">🏴‍☠️ Set Sail</h2>
+      <p class="overlayText">Choose a mode, then enter what's needed to start.</p>
 
-      <!-- Wrap in a form to help stop autofill -->
-      <form id="joinForm" autocomplete="off" autocapitalize="off">
-        <!-- decoy fields (helps defeat autofill in some browsers) -->
-        <input style="position:absolute; left:-9999px; top:-9999px;" type="text" name="username" autocomplete="username">
-        <input style="position:absolute; left:-9999px; top:-9999px;" type="password" name="password" autocomplete="current-password">
-      </form>
-
-      <!-- MODE SELECT -->
-      <div id="modeSelect">
-        <p class="overlayText">Choose a mode to begin.</p>
-
-        <button type="button" id="modeAiBtn" class="btn primary big">Play vs AI</button>
-        <button type="button" id="modePvpBtn" class="btn primary big">Play vs Player</button>
-
-        <div class="overlayHint">
-          vs AI: just your name • vs Player: name + shared table code
+      <!-- MODE CHOICE -->
+      <div id="modeChoice" style="display:block;">
+        <button id="chooseAiBtn" class="btn primary big" style="width:100%; margin-top:8px;">Play vs AI</button>
+        <button id="choosePvpBtn" class="btn primary big" style="width:100%; margin-top:12px;">Play vs Player</button>
+        <div class="overlayHint" style="margin-top:12px;">
+          vs AI: just your name. &nbsp;&nbsp;•&nbsp;&nbsp; vs Player: name + shared table code.
         </div>
       </div>
 
-      <!-- AI MODE -->
-      <div id="aiForm" class="hidden">
-        <p class="overlayText">Enter your name to start vs AI.</p>
+      <!-- MODE: AI -->
+      <div id="aiForm" style="display:none; margin-top:10px;">
+        <p id="modeBlurbAi" class="overlayText" style="margin-top:0;">AI mode: enter your name.</p>
 
         <div class="overlayRow">
           <div class="overlayLabel">Your name</div>
           <input
-            id="aiNameInput"
+            id="nameInputAi"
             class="nameInput"
             maxlength="16"
             placeholder="Name"
@@ -75,20 +66,22 @@
           />
         </div>
 
-        <button type="button" id="aiJoinBtn" class="btn primary big">Set Sail</button>
+        <button id="joinAiBtn" class="btn primary big" style="margin-top:8px;">Set Sail</button>
         <div class="overlayHint">Tip: vs AI doesn’t need a table code.</div>
 
-        <button type="button" id="backFromAi" class="btn ghost">Back</button>
+        <button id="backFromAiBtn" class="btn primary big" style="margin-top:12px; width:100%;">Back</button>
       </div>
 
-      <!-- PVP MODE -->
-      <div id="pvpForm" class="hidden">
-        <p class="overlayText">Enter your name and a shared table code.</p>
+      <!-- MODE: PVP -->
+      <div id="pvpForm" style="display:none; margin-top:10px;">
+        <p id="modeBlurbPvp" class="overlayText" style="margin-top:0;">
+          2-player: one player chooses a table code, the other player enters the same code.
+        </p>
 
         <div class="overlayRow">
           <div class="overlayLabel">Your name</div>
           <input
-            id="pvpNameInput"
+            id="nameInputPvp"
             class="nameInput"
             maxlength="16"
             placeholder="Name"
@@ -103,7 +96,7 @@
         <div class="overlayRow">
           <div class="overlayLabel">Table code</div>
           <input
-            id="pvpTableInput"
+            id="tableInputPvp"
             class="nameInput"
             maxlength="24"
             placeholder="Table code"
@@ -115,15 +108,10 @@
           />
         </div>
 
-        <div class="overlayHint">
-          One player creates a table code — the other player enters the same code.
-        </div>
-
-        <button type="button" id="pvpJoinBtn" class="btn primary big">Set Sail</button>
-
+        <button id="joinPvpBtn" class="btn primary big" style="margin-top:8px;">Set Sail</button>
         <div class="overlayHint">Tip: Use the same table code on another device for 2-player.</div>
 
-        <button type="button" id="backFromPvp" class="btn ghost">Back</button>
+        <button id="backFromPvpBtn" class="btn primary big" style="margin-top:12px; width:100%;">Back</button>
       </div>
     </div>
   </div>
@@ -225,8 +213,8 @@
           <div class="actionRow">
             <button id="discardBtn" class="btn primary" style="display:none;">Send to Crib</button>
             <button id="goBtn" class="btn go" style="display:none;">GO</button>
-            <button id="nextHandBtn" class="btn primary" style="display:none;">Next Hand</button>
-            <button id="newMatchBtn" class="btn primary" style="display:none;">New Match</button>
+            <button id="nextHandBtn" class="btn primary big" style="display:none;">Next Hand</button>
+            <button id="newMatchBtn" class="btn primary big" style="display:none;">New Match</button>
           </div>
 
           <div id="handArea" class="handArea"></div>

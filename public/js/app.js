@@ -56,23 +56,23 @@ const cTotal = el("cTotal");
 // Toast
 const toast = el("toast");
 
-// Join overlay + mode UI
+// Join overlay (mode chooser + forms)
 const joinOverlay = el("joinOverlay");
-const modeSelect = el("modeSelect");
+const modeChoice = el("modeChoice");
+const chooseAiBtn = el("chooseAiBtn");
+const choosePvpBtn = el("choosePvpBtn");
+
 const aiForm = el("aiForm");
 const pvpForm = el("pvpForm");
 
-const modeAiBtn = el("modeAiBtn");
-const modePvpBtn = el("modePvpBtn");
-const backFromAi = el("backFromAi");
-const backFromPvp = el("backFromPvp");
+const nameInputAi = el("nameInputAi");
+const joinAiBtn = el("joinAiBtn");
+const backFromAiBtn = el("backFromAiBtn");
 
-const aiNameInput = el("aiNameInput");
-const pvpNameInput = el("pvpNameInput");
-const pvpTableInput = el("pvpTableInput");
-
-const aiJoinBtn = el("aiJoinBtn");
-const pvpJoinBtn = el("pvpJoinBtn");
+const nameInputPvp = el("nameInputPvp");
+const tableInputPvp = el("tableInputPvp");
+const joinPvpBtn = el("joinPvpBtn");
+const backFromPvpBtn = el("backFromPvpBtn");
 
 // GO modal
 const goModal = el("goModal");
@@ -87,12 +87,11 @@ const gameModalNewMatch = el("gameModalNewMatch");
 
 let state = null;
 let lastGoSeenTs = 0;
-let lastGameOverShownKey = "";
+let lastGameOverShownKey = ""; // prevents re-showing modal on every state emit
 
-// ---------- helpers ----------
 function cardValue(rank) {
   if (rank === "A") return 1;
-  if (["K","Q","J"].includes(rank)) return 10;
+  if (["K", "Q", "J"].includes(rank)) return 10;
   return parseInt(rank, 10);
 }
 
@@ -124,7 +123,9 @@ function makeCardButton(card, opts = {}) {
   return btn;
 }
 
-function clamp(n, min, max) { return Math.max(min, Math.min(max, n)); }
+function clamp(n, min, max) {
+  return Math.max(min, Math.min(max, n));
+}
 
 function initTicksOnce() {
   if (!ticks) return;
@@ -258,6 +259,7 @@ function renderPileAndHud() {
     lastScore.classList.add("hidden");
   }
 
+  // Sticky GO modal
   maybeShowGoModal();
 }
 
@@ -386,8 +388,10 @@ function render() {
 
   if (state.stage === "pegging") {
     showPanel.classList.add("hidden");
-    handTitle.textContent = "Pegging";
-    handHelp.textContent = "Play a card without exceeding 31. If you can’t play, press GO.";
+
+    // clearer label for the circled hand area
+    handTitle.textContent = "Your Hand";
+    handHelp.textContent = "Pegging: play a card without exceeding 31. If you can’t play, press GO.";
 
     const myTurn = state.turn === state.me;
     const myHand = state.myHand || [];
@@ -403,10 +407,14 @@ function render() {
     });
 
     const canPlay = myHand.some(c => count + cardValue(c.rank) <= 31);
-    if (myTurn && myHand.length > 0 && !canPlay) {
+
+    // IMPORTANT: show GO whenever it's your turn and you cannot play
+    // (even if your hand is empty — prevents "it just advances" confusion)
+    if (myTurn && !canPlay) {
       goBtn.style.display = "inline-block";
       goBtn.onclick = () => socket.emit("go");
     }
+
     return;
   }
 
@@ -425,97 +433,100 @@ function render() {
       handHelp.textContent = `${playerName(state.matchWinner)} wins the match (best of 3).`;
     }
 
-    const myHand = state.myHand || [];
-    myHand.forEach(card => handArea.appendChild(makeCardButton(card, { disabled: true })));
-    if (state.cut) handArea.appendChild(makeCardButton(state.cut, { disabled: true }));
+    // Instead of re-showing cards here, keep it clean and point to scoring below
+    handArea.innerHTML = "";
+    const msg = document.createElement("div");
+    msg.className = "mutedSmall";
+    msg.style.textAlign = "center";
+    msg.style.padding = "14px 6px";
+    msg.textContent = "See scoring below.";
+    handArea.appendChild(msg);
 
+    // Sticky game-over modal
     maybeShowGameOverModal();
+
     return;
   }
 }
 
-// ---------- JOIN FLOW (Mode select) ----------
-function showModeSelect() {
-  modeSelect.classList.remove("hidden");
-  aiForm.classList.add("hidden");
-  pvpForm.classList.add("hidden");
+// -------------------- JOIN FLOW (Option A) --------------------
+function showModeChoice() {
+  modeChoice.style.display = "block";
+  aiForm.style.display = "none";
+  pvpForm.style.display = "none";
+
+  // blank fields every time we return here
+  if (nameInputAi) nameInputAi.value = "";
+  if (nameInputPvp) nameInputPvp.value = "";
+  if (tableInputPvp) tableInputPvp.value = "";
 }
 
 function showAiForm() {
-  modeSelect.classList.add("hidden");
-  aiForm.classList.remove("hidden");
-  pvpForm.classList.add("hidden");
-  aiNameInput?.focus?.();
+  modeChoice.style.display = "none";
+  aiForm.style.display = "block";
+  pvpForm.style.display = "none";
+  if (nameInputAi) nameInputAi.value = "";
+  setTimeout(() => nameInputAi?.focus?.(), 0);
 }
 
 function showPvpForm() {
-  modeSelect.classList.add("hidden");
-  aiForm.classList.add("hidden");
-  pvpForm.classList.remove("hidden");
-  pvpNameInput?.focus?.();
+  modeChoice.style.display = "none";
+  aiForm.style.display = "none";
+  pvpForm.style.display = "block";
+  if (nameInputPvp) nameInputPvp.value = "";
+  if (tableInputPvp) tableInputPvp.value = "";
+  setTimeout(() => nameInputPvp?.focus?.(), 0);
 }
 
-function blankJoinFields() {
-  if (aiNameInput) aiNameInput.value = "";
-  if (pvpNameInput) pvpNameInput.value = "";
-  if (pvpTableInput) pvpTableInput.value = "";
+function doJoinAI() {
+  const name = (nameInputAi.value || "").trim().slice(0, 16);
+  if (!name) { alert("Enter a name."); return; }
+
+  // stable tableId for AI games; server treats vsAI as enabled and sets PLAYER2 to AI
+  socket.emit("join_table", { tableId: "AI", name, vsAI: true });
+  joinOverlay.style.display = "none";
 }
 
-function hideJoinOverlay() {
-  if (joinOverlay) joinOverlay.style.display = "none";
-}
+function doJoinPVP() {
+  const name = (nameInputPvp.value || "").trim().slice(0, 16);
+  const tableId = (tableInputPvp.value || "").trim().slice(0, 24);
 
-// Wire mode buttons
-modeAiBtn.onclick = () => { blankJoinFields(); showAiForm(); };
-modePvpBtn.onclick = () => { blankJoinFields(); showPvpForm(); };
-backFromAi.onclick = () => { blankJoinFields(); showModeSelect(); };
-backFromPvp.onclick = () => { blankJoinFields(); showModeSelect(); };
-
-// AI Join
-aiJoinBtn.onclick = () => {
-  const name = (aiNameInput?.value || "").trim().slice(0, 16);
-  if (!name) return alert("Enter a name.");
-
-  // unique-ish AI table id to avoid collisions
-  const tableId = "AI-" + Math.random().toString(36).slice(2, 6).toUpperCase();
-  socket.emit("join_table", { tableId, name, vsAI: true });
-  hideJoinOverlay();
-};
-
-// PvP Join
-pvpJoinBtn.onclick = () => {
-  const name = (pvpNameInput?.value || "").trim().slice(0, 16);
-  const tableId = (pvpTableInput?.value || "").trim().slice(0, 24);
-  if (!name) return alert("Enter a name.");
-  if (!tableId) return alert("Enter a table code.");
+  if (!name) { alert("Enter a name."); return; }
+  if (!tableId) { alert("Enter a table code."); return; }
 
   socket.emit("join_table", { tableId, name, vsAI: false });
-  hideJoinOverlay();
-};
+  joinOverlay.style.display = "none";
+}
 
-// Enter key support
-aiNameInput?.addEventListener("keydown", (e) => { if (e.key === "Enter") aiJoinBtn.click(); });
-pvpNameInput?.addEventListener("keydown", (e) => { if (e.key === "Enter") pvpJoinBtn.click(); });
-pvpTableInput?.addEventListener("keydown", (e) => { if (e.key === "Enter") pvpJoinBtn.click(); });
+// Wire up join UI
+chooseAiBtn.onclick = showAiForm;
+choosePvpBtn.onclick = showPvpForm;
+backFromAiBtn.onclick = showModeChoice;
+backFromPvpBtn.onclick = showModeChoice;
 
-// Force blank join fields on load/back-forward cache restores
+joinAiBtn.onclick = doJoinAI;
+joinPvpBtn.onclick = doJoinPVP;
+
+nameInputAi?.addEventListener("keydown", (e)=>{ if (e.key === "Enter") doJoinAI(); });
+nameInputPvp?.addEventListener("keydown", (e)=>{ if (e.key === "Enter") doJoinPVP(); });
+tableInputPvp?.addEventListener("keydown", (e)=>{ if (e.key === "Enter") doJoinPVP(); });
+
+// Force blank join fields every load/restore
 (function initJoinDefaults(){
-  blankJoinFields();
-  showModeSelect();
-
+  function blankAllJoinFields() {
+    if (nameInputAi) nameInputAi.value = "";
+    if (nameInputPvp) nameInputPvp.value = "";
+    if (tableInputPvp) tableInputPvp.value = "";
+  }
+  blankAllJoinFields();
   window.addEventListener("pageshow", () => {
-    // iOS Safari back/forward cache can rehydrate inputs
-    blankJoinFields();
-    showModeSelect();
-    if (joinOverlay) joinOverlay.style.display = "flex";
+    blankAllJoinFields();
+    showModeChoice();
   });
-
-  // extra safety against delayed autofill
-  setTimeout(blankJoinFields, 50);
-  setTimeout(blankJoinFields, 250);
+  setTimeout(() => { blankAllJoinFields(); showModeChoice(); }, 50);
+  setTimeout(() => { blankAllJoinFields(); showModeChoice(); }, 250);
 })();
 
-// ---------- socket ----------
 socket.on("connect", () => {
   // idle until Set Sail
 });

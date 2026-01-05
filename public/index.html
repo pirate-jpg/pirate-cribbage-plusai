@@ -10,238 +10,66 @@
 <body>
   <div id="toast" class="toast"></div>
 
-  <!-- GO MODAL -->
-  <div id="goModal" class="modalOverlay hidden" role="dialog" aria-modal="true">
-    <div class="modalCard">
-      <div class="modalTitle">⚓ GO!</div>
-      <div id="goModalText" class="modalText">Opponent said GO.</div>
-      <button id="goModalOk" class="btn primary big">Aye</button>
-    </div>
-  </div>
-
-  <!-- GAME OVER MODAL -->
-  <div id="gameModal" class="modalOverlay hidden" role="dialog" aria-modal="true">
-    <div class="modalCard">
-      <div class="modalTitle">🏁 Game Over</div>
-      <div id="gameModalText" class="modalText">—</div>
-      <div class="modalRow">
-        <button id="gameModalNext" class="btn primary big">Next Game</button>
-        <button id="gameModalNewMatch" class="btn primary big" style="display:none;">New Match</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- JOIN OVERLAY (Option A: choose mode first) -->
+  <!-- JOIN OVERLAY -->
   <div id="joinOverlay" class="overlay">
     <div class="panel overlayCard">
-      <h2 class="overlayTitle">🏴‍☠️ Set Sail</h2>
-      <p class="overlayText">Choose a mode, then enter what’s needed to start.</p>
 
-      <form id="joinForm" autocomplete="off" novalidate>
-        <!-- Decoy fields to fight autofill -->
-        <input style="position:absolute; left:-9999px; width:1px; height:1px; opacity:0;"
-               type="text" name="username" autocomplete="username" />
-        <input style="position:absolute; left:-9999px; width:1px; height:1px; opacity:0;"
-               type="password" name="password" autocomplete="current-password" />
+      <!-- MODE SELECT -->
+      <div id="modeSelect">
+        <h2 class="overlayTitle">🏴‍☠️ Set Sail</h2>
+        <p class="overlayText">Choose a mode to begin.</p>
 
-        <!-- MODE SELECT -->
-        <div id="modeSelect" class="modeSelect">
-          <button type="button" id="modeAiBtn" class="btn primary big" style="width:100%;">Play vs AI</button>
-          <div style="height:10px;"></div>
-          <button type="button" id="modePvpBtn" class="btn primary big" style="width:100%;">Play vs Player</button>
-          <div class="overlayHint" style="margin-top:12px;">
-            vs AI: just your name. &nbsp;&nbsp;•&nbsp;&nbsp; vs Player: name + shared table code.
-          </div>
+        <button id="modeAiBtn" class="btn primary big">Play vs AI</button>
+        <button id="modePvpBtn" class="btn primary big">Play vs Player</button>
+
+        <div class="overlayHint">
+          vs AI: just your name • vs Player: name + shared table code
+        </div>
+      </div>
+
+      <!-- AI MODE -->
+      <div id="aiForm" class="hidden">
+        <h2 class="overlayTitle">🏴‍☠️ Play vs AI</h2>
+
+        <div class="overlayRow">
+          <div class="overlayLabel">Your name</div>
+          <input id="aiNameInput" class="nameInput" placeholder="Name" maxlength="16"
+                 autocomplete="off" autocorrect="off" spellcheck="false"/>
         </div>
 
-        <!-- INPUTS -->
-        <div id="joinFields" class="hidden">
-          <div class="overlayRow">
-            <div class="overlayLabel">Your name</div>
-            <input
-              id="nameInput"
-              class="nameInput"
-              maxlength="16"
-              placeholder="Name"
-              inputmode="text"
-              autocomplete="off"
-              autocorrect="off"
-              autocapitalize="words"
-              spellcheck="false"
-            />
-          </div>
+        <button id="aiJoinBtn" class="btn primary big">Set Sail</button>
+        <div class="overlayHint">No table code needed.</div>
 
-          <div class="overlayRow" id="tableRow">
-            <div class="overlayLabel">Table code</div>
-            <input
-              id="tableInput"
-              class="nameInput"
-              maxlength="24"
-              placeholder="Table code"
-              inputmode="text"
-              autocomplete="off"
-              autocorrect="off"
-              autocapitalize="characters"
-              spellcheck="false"
-            />
-          </div>
+        <button class="btn ghost" id="backFromAi">Back</button>
+      </div>
 
-          <!-- hidden; mode drives it -->
-          <input id="vsAiInput" type="checkbox" class="hidden" />
+      <!-- PVP MODE -->
+      <div id="pvpForm" class="hidden">
+        <h2 class="overlayTitle">🏴‍☠️ Play vs Player</h2>
 
-          <button id="nameJoinBtn" type="submit" class="btn primary big">Set Sail</button>
-
-          <div id="joinHint" class="overlayHint">
-            Tip: Use the same table code on another device for 2-player.
-          </div>
-
-          <div style="margin-top:10px;">
-            <button type="button" id="backToModeBtn" class="btn" style="width:100%;">Back</button>
-          </div>
+        <div class="overlayRow">
+          <div class="overlayLabel">Your name</div>
+          <input id="pvpNameInput" class="nameInput" placeholder="Name" maxlength="16"
+                 autocomplete="off" autocorrect="off" spellcheck="false"/>
         </div>
-      </form>
+
+        <div class="overlayRow">
+          <div class="overlayLabel">Table code</div>
+          <input id="pvpTableInput" class="nameInput" placeholder="Table code" maxlength="24"
+                 autocomplete="off" autocorrect="off" spellcheck="false"/>
+        </div>
+
+        <!-- ✅ CLARIFICATION ADDED HERE -->
+        <div class="overlayHint">
+          One player creates a table code — the other player enters the same code.
+        </div>
+
+        <button id="pvpJoinBtn" class="btn primary big">Set Sail</button>
+        <button class="btn ghost" id="backFromPvp">Back</button>
+      </div>
+
     </div>
   </div>
-
-  <header class="topbar">
-    <div class="brand">
-      <span class="anchor">⚓</span>
-      <span class="title">Pirate Cribbage</span>
-      <span class="subtitle">Pirate TV</span>
-    </div>
-
-    <div class="topmeta">
-      <div id="tableLine" class="chip">Table: —</div>
-      <div id="meLine" class="chip">You: —</div>
-    </div>
-  </header>
-
-  <main class="page">
-    <section class="grid">
-
-      <!-- LEFT TOP: BOARD -->
-      <section class="panel boardPanel woodFrame">
-        <div class="panelHeader">
-          <h2>Cribbage Board</h2>
-          <div class="mutedSmall">Race to 121</div>
-        </div>
-
-        <div class="boardSurface">
-          <div class="track">
-            <div class="lane lane1">
-              <div class="peg peg1" id="p1Peg"></div>
-            </div>
-            <div class="lane lane2">
-              <div class="peg peg2" id="p2Peg"></div>
-            </div>
-            <div class="tickRow" id="ticks"></div>
-          </div>
-
-          <div class="legend">
-            <div class="dotLine"><span class="dot dot1"></span><span id="p1Label">P1</span></div>
-            <div class="dotLine"><span class="dot dot2"></span><span id="p2Label">P2</span></div>
-          </div>
-        </div>
-      </section>
-
-      <!-- LEFT BOTTOM: CREW -->
-      <aside class="panel crewPanel">
-        <div class="panelHeader">
-          <h2>⚓ Crew</h2>
-          <div id="playersLine" class="mutedSmall">Players: —</div>
-        </div>
-
-        <div class="miniRow">
-          <div class="pill" id="stageLine">Stage: —</div>
-          <div class="pill" id="dealerLine">Dealer: —</div>
-          <div class="pill" id="turnLine">Turn: —</div>
-        </div>
-
-        <div class="scoreBlock">
-          <div class="scoreTitle">Game Score</div>
-          <div id="scoreLine" class="scoreText">—</div>
-        </div>
-
-        <div class="scoreBlock">
-          <div class="scoreTitle">Match Score</div>
-          <div id="matchLine" class="scoreText">—</div>
-        </div>
-
-        <div class="mutedSmall" id="cribLine">Crib: —</div>
-      </aside>
-
-      <!-- RIGHT: PLAY -->
-      <section class="panel playPanel">
-        <div class="panelHeader">
-          <h2 id="handTitle">Waiting…</h2>
-          <div id="handHelp" class="mutedSmall"></div>
-        </div>
-
-        <div class="hudRow">
-          <div class="countBox">
-            <div class="countLabel">COUNT</div>
-            <div id="countNum" class="countNum">0</div>
-            <div class="countHint">Keep it ≤ 31</div>
-          </div>
-
-          <div class="statusBox">
-            <div class="statusTitle">Pegging Status</div>
-            <div id="peggingStatus" class="statusText">—</div>
-            <div id="lastScore" class="lastScore hidden">—</div>
-          </div>
-        </div>
-
-        <div class="pileBlock">
-          <div class="pileTitle">Cards played (this count)</div>
-          <div id="pileArea" class="pileArea"></div>
-        </div>
-
-        <div class="handBlock">
-          <div class="actionRow">
-            <button id="discardBtn" class="btn primary" style="display:none;">Send to Crib</button>
-            <button id="goBtn" class="btn go" style="display:none;">GO</button>
-            <button id="nextHandBtn" class="btn primary" style="display:none;">Next Hand</button>
-            <button id="newMatchBtn" class="btn primary" style="display:none;">New Match</button>
-          </div>
-
-          <div id="handArea" class="handArea"></div>
-        </div>
-
-        <!-- SHOW PANEL -->
-        <div id="showPanel" class="panel showPanel hidden">
-          <div class="panelHeader spread">
-            <h2>Show</h2>
-            <div id="cutLine" class="mutedSmall">Cut: —</div>
-          </div>
-
-          <div class="showGrid">
-            <div class="showCol">
-              <h3 id="ndTitle">Non-dealer</h3>
-              <div id="ndCards" class="cardRow"></div>
-              <ul id="ndBreak" class="breakList"></ul>
-              <div id="ndTotal" class="totalLine">Total: —</div>
-            </div>
-
-            <div class="showCol">
-              <h3 id="dTitle">Dealer</h3>
-              <div id="dCards" class="cardRow"></div>
-              <ul id="dBreak" class="breakList"></ul>
-              <div id="dTotal" class="totalLine">Total: —</div>
-            </div>
-
-            <div class="showCol">
-              <h3 id="cTitle">Crib</h3>
-              <div id="cCards" class="cardRow"></div>
-              <ul id="cBreak" class="breakList"></ul>
-              <div id="cTotal" class="totalLine">Total: —</div>
-            </div>
-          </div>
-        </div>
-
-      </section>
-
-    </section>
-  </main>
 
   <script src="/socket.io/socket.io.js"></script>
   <script src="/js/app.js"></script>

@@ -11,6 +11,15 @@
   <!-- TOAST -->
   <div id="toast" class="toast"></div>
 
+  <!-- DISCARD MODAL -->
+  <div id="discardModal" class="modalOverlay hidden" role="dialog" aria-modal="true">
+    <div class="modalCard">
+      <div class="modalTitle">🧺 To the Crib</div>
+      <div id="discardModalText" class="modalText">Discard two cards to the crib.</div>
+      <button id="discardModalOk" class="btn primary big">Aye</button>
+    </div>
+  </div>
+
   <!-- GO MODAL -->
   <div id="goModal" class="modalOverlay hidden" role="dialog" aria-modal="true">
     <div class="modalCard">
@@ -97,6 +106,7 @@
           <button id="backBtn" type="button" class="btn primary big" style="width:100%; margin-top:12px;">Back</button>
         </form>
       </div>
+
     </div>
   </div>
 
@@ -194,8 +204,8 @@
         </div>
 
         <div class="handBlock">
-          <!-- Label INSIDE the same block as the hand cards -->
-          <div id="handBlockLabel" style="font-weight:700; margin:6px 0 10px 2px; opacity:.95;"></div>
+          <div id="handBlockLabel"
+               style="font-weight:700; margin:6px 0 10px 2px; opacity:.95;"></div>
 
           <div class="actionRow">
             <button id="discardBtn" class="btn primary" style="display:none;">Send to Crib</button>
@@ -237,6 +247,7 @@
             </div>
           </div>
         </div>
+
       </section>
 
     </section>

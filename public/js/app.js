@@ -19,11 +19,13 @@ const cribLine = el("cribLine");
 const handTitle = el("handTitle");
 const handHelp = el("handHelp");
 const handArea = el("handArea");
-const handBlockLabel = el("handBlockLabel");
 const discardBtn = el("discardBtn");
 const goBtn = el("goBtn");
 const nextHandBtn = el("nextHandBtn");
 const newMatchBtn = el("newMatchBtn");
+
+// Hand label inside block
+const handBlockLabel = el("handBlockLabel");
 
 // Pegging HUD
 const pileArea = el("pileArea");
@@ -57,20 +59,11 @@ const cTotal = el("cTotal");
 // Toast
 const toast = el("toast");
 
-// Join overlay
+// Join overlay (if present)
 const joinOverlay = el("joinOverlay");
-const joinTopHelp = el("joinTopHelp");
-const modePanel = el("modePanel");
-const entryPanel = el("entryPanel");
-const modeAiBtn = el("modeAiBtn");
-const modePvpBtn = el("modePvpBtn");
-const backBtn = el("backBtn");
-const entryHint = el("entryHint");
-const joinForm = el("joinForm");
-
 const nameInput = el("nameInput");
 const tableInput = el("tableInput");
-const tableRow = el("tableRow");
+const vsAiInput = el("vsAiInput"); // may be null in new UI; ok
 const nameJoinBtn = el("nameJoinBtn");
 
 // GO modal
@@ -84,11 +77,21 @@ const gameModalText = el("gameModalText");
 const gameModalNext = el("gameModalNext");
 const gameModalNewMatch = el("gameModalNewMatch");
 
+// New join UI elements (optional)
+const modeAiBtn = el("modeAiBtn");
+const modePvpBtn = el("modePvpBtn");
+const modePanel = el("modePanel");
+const entryPanel = el("entryPanel");
+const joinTopHelp = el("joinTopHelp");
+const entryHint = el("entryHint");
+const tableRow = el("tableRow");
+const backBtn = el("backBtn");
+const joinForm = el("joinForm");
+
 let state = null;
 let lastGoSeenTs = 0;
 let lastGameOverShownKey = "";
-
-let selectedMode = null; // "ai" | "pvp"
+let lastDiscardPromptKey = ""; // ✅ ensures discard popup shows once per hand per player
 
 function cardValue(rank) {
   if (rank === "A") return 1;
@@ -151,12 +154,10 @@ function playerName(p) {
 
 function renderBoard() {
   if (!state) return;
-
-  p1Label.textContent = state.players.PLAYER1 || "P1";
-  p2Label.textContent = state.players.PLAYER2 || "P2";
-
-  setPegPosition(p1Peg, state.scores.PLAYER1);
-  setPegPosition(p2Peg, state.scores.PLAYER2);
+  if (p1Label) p1Label.textContent = state.players.PLAYER1 || "P1";
+  if (p2Label) p2Label.textContent = state.players.PLAYER2 || "P2";
+  if (p1Peg) setPegPosition(p1Peg, state.scores.PLAYER1);
+  if (p2Peg) setPegPosition(p2Peg, state.scores.PLAYER2);
 }
 
 function showToast(msg) {
@@ -188,7 +189,8 @@ function maybeShowGoModal() {
   // Only show if opponent said GO
   if (ge.player === state.me) return;
 
-  goModalText.textContent = `Opponent said GO`;
+  const who = ge.player === state.me ? "You" : "Opponent";
+  if (goModalText) goModalText.textContent = `${who} said GO`;
   showModal(goModal);
 }
 
@@ -207,13 +209,13 @@ function maybeShowGameOverModal() {
   const winnerName = playerName(state.gameWinner);
   if (state.matchOver) {
     const matchWinnerName = playerName(state.matchWinner);
-    gameModalText.textContent = `${winnerName} won this game.\n\n${matchWinnerName} wins the match (best of 3).`;
-    gameModalNewMatch.style.display = "inline-block";
-    gameModalNext.textContent = "Next Game";
+    if (gameModalText) gameModalText.textContent = `${winnerName} won this game.\n\n${matchWinnerName} wins the match (best of 3).`;
+    if (gameModalNewMatch) gameModalNewMatch.style.display = "inline-block";
+    if (gameModalNext) gameModalNext.textContent = "Next Game";
   } else {
-    gameModalText.textContent = `${winnerName} won this game.\n\nPress Next Game when you’re ready.`;
-    gameModalNewMatch.style.display = "none";
-    gameModalNext.textContent = "Next Game";
+    if (gameModalText) gameModalText.textContent = `${winnerName} won this game.\n\nPress Next Game when you’re ready.`;
+    if (gameModalNewMatch) gameModalNewMatch.style.display = "none";
+    if (gameModalNext) gameModalNext.textContent = "Next Game";
   }
 
   showModal(gameModal);
@@ -241,6 +243,7 @@ function clearPeggingPanelsForShowOrNonPegging() {
 function renderPileAndHud() {
   if (!state) return;
 
+  // Show count always (server now delays 31 reset briefly)
   if (countNum) countNum.textContent = String(state.peg?.count ?? 0);
 
   if (state.stage !== "pegging") {
@@ -277,6 +280,7 @@ function renderPileAndHud() {
 }
 
 function renderBreakdown(listEl, breakdown) {
+  if (!listEl) return;
   listEl.innerHTML = "";
   if (!breakdown || !breakdown.items || breakdown.items.length === 0) {
     const li = document.createElement("li");
@@ -352,6 +356,23 @@ function setNextHandProminence(on) {
   }
 }
 
+// ✅ Discard acknowledgement popup (blocking) – no HTML changes required
+function maybeShowDiscardPopupOnce() {
+  if (!state) return;
+  if (state.stage !== "discard") return;
+
+  const need = 2 - (state.discardsCount?.[state.me] ?? 0);
+  if (need <= 0) return;
+
+  const key = `${state.tableId}|${state.dealer}|${state.me}|${state.discardsCount?.[state.me] ?? 0}|${state.stage}`;
+  if (key === lastDiscardPromptKey) return;
+  lastDiscardPromptKey = key;
+
+  const cribOwner = playerName(state.dealer);
+  // Must be acknowledged
+  alert(`Discard phase:\n\nTap ${need} card(s) to send to ${cribOwner}'s crib.`);
+}
+
 function render() {
   if (!state) return;
 
@@ -373,8 +394,9 @@ function render() {
   if (matchLine) matchLine.textContent = `Match (best of 3): ${p1} ${mw1} • ${p2} ${mw2}`;
 
   if (cribLine) {
+    const dealerName = playerName(state.dealer);
     cribLine.textContent =
-      `Crib (${playerName(state.dealer)}) • Discards: ${p1} ${state.discardsCount.PLAYER1}/2  ${p2} ${state.discardsCount.PLAYER2}/2`;
+      `Crib (${dealerName}) • Discards: ${p1} ${state.discardsCount.PLAYER1}/2  ${p2} ${state.discardsCount.PLAYER2}/2`;
   }
 
   initTicksOnce();
@@ -382,7 +404,7 @@ function render() {
   renderPileAndHud();
   renderShow();
 
-  // buttons reset
+  // buttons default hidden
   if (discardBtn) discardBtn.style.display = "none";
   if (goBtn) goBtn.style.display = "none";
   if (nextHandBtn) nextHandBtn.style.display = "none";
@@ -397,7 +419,6 @@ function render() {
     if (handTitle) handTitle.textContent = "Waiting for crew…";
     if (handHelp) handHelp.textContent = `If this is 2-player, open the same table code on the other device: "${state.tableId}".`;
     if (showPanel) showPanel.classList.add("hidden");
-    if (handBlockLabel) handBlockLabel.textContent = "";
     return;
   }
 
@@ -405,9 +426,15 @@ function render() {
     if (showPanel) showPanel.classList.add("hidden");
 
     const cribOwner = playerName(state.dealer);
+
     if (handTitle) handTitle.textContent = "Discard";
-    if (handHelp) handHelp.textContent = `Click a card to send it to ${cribOwner}'s crib (send 2 total).`;
+    if (handHelp) handHelp.textContent = `Tap 2 cards to send to ${cribOwner}'s crib.`;
+
+    // ✅ Put "Your hand" inside the same block as the cards
     if (handBlockLabel) handBlockLabel.textContent = "Your hand";
+
+    // ✅ Acknowledgement popup (once)
+    maybeShowDiscardPopupOnce();
 
     const myHand = state.myHand || [];
     myHand.forEach(card => {
@@ -428,14 +455,19 @@ function render() {
 
     if (handTitle) handTitle.textContent = "Pegging";
     if (handHelp) handHelp.textContent = "Play a card without exceeding 31. If you can’t play, press GO.";
+
+    // ✅ Put "Your hand" inside the same block as the cards
     if (handBlockLabel) handBlockLabel.textContent = "Your hand";
 
     const myTurn = state.turn === state.me;
     const myHand = state.myHand || [];
     const count = state.peg?.count ?? 0;
 
+    // If server is pausing on a 31 reset, disable all plays for the moment
+    const pendingReset = !!state.peg?.pendingReset;
+
     myHand.forEach(card => {
-      const playable = myTurn && (count + cardValue(card.rank) <= 31);
+      const playable = !pendingReset && myTurn && (count + cardValue(card.rank) <= 31);
       const btn = makeCardButton(card, {
         disabled: !playable,
         onClick: () => socket.emit("play_card", { cardId: card.id })
@@ -444,17 +476,18 @@ function render() {
     });
 
     const canPlay = myHand.some(c => count + cardValue(c.rank) <= 31);
-    if (myTurn && myHand.length > 0 && !canPlay) {
+    if (!pendingReset && myTurn && myHand.length > 0 && !canPlay) {
       if (goBtn) {
         goBtn.style.display = "inline-block";
         goBtn.onclick = () => socket.emit("go");
       }
     }
+
     return;
   }
 
   if (state.stage === "show") {
-    // end-of-hand cleanup
+    // ✅ REQUIRED: end-of-hand cleanup
     clearPeggingPanelsForShowOrNonPegging();
 
     if (handTitle) handTitle.textContent = "Show";
@@ -464,9 +497,9 @@ function render() {
         : "See scoring below.";
     }
 
+    // no "Your hand" label on show screen
     if (handBlockLabel) handBlockLabel.textContent = "";
 
-    // Next Hand prominent
     if (nextHandBtn) {
       nextHandBtn.style.display = "inline-block";
       setNextHandProminence(true);
@@ -479,7 +512,6 @@ function render() {
       if (handHelp) handHelp.textContent = `${playerName(state.matchWinner)} wins the match (best of 3).`;
     }
 
-    // Clear handArea and show message
     if (handArea) {
       handArea.innerHTML = "";
       const msg = document.createElement("div");
@@ -494,75 +526,55 @@ function render() {
   }
 }
 
-// ---------- JOIN FLOW (mode chooser) ----------
+// ---------- JOIN FLOW (supports both your old overlay + your newer mode selector) ----------
+let joinMode = null; // "ai" | "pvp"
+
 function showEntry(mode) {
-  selectedMode = mode; // "ai" or "pvp"
+  joinMode = mode;
+
   if (modePanel) modePanel.style.display = "none";
   if (entryPanel) entryPanel.style.display = "block";
 
-  if (mode === "ai") {
-    if (joinTopHelp) joinTopHelp.textContent = "VS AI: enter your name, then Set Sail.";
-    if (entryHint) entryHint.textContent = "Tip: vs AI doesn’t need a table code.";
-    if (tableRow) tableRow.style.display = "none";
-    if (tableInput) tableInput.value = "";
-  } else {
-    if (joinTopHelp) joinTopHelp.textContent = "VS Player: enter your name + a table code.\nPlayer 2 must enter the same table code.";
-    if (entryHint) entryHint.textContent = "Tip: Use the same table code on another device for 2-player.";
-    if (tableRow) tableRow.style.display = "block";
+  if (joinTopHelp) {
+    joinTopHelp.textContent = mode === "ai"
+      ? "VS AI: enter your name, then Set Sail."
+      : "VS Player: enter your name + a table code. Player 2 must enter the same table code.";
   }
 
-  if (nameInput) {
-    nameInput.value = "";
-    nameInput.focus();
-  }
-  if (tableInput && mode === "pvp") tableInput.value = "";
+  if (tableRow) tableRow.style.display = (mode === "pvp") ? "block" : "none";
+  if (entryHint) entryHint.textContent = "";
 }
 
-function showModeChooser() {
-  selectedMode = null;
+function backToMode() {
+  joinMode = null;
   if (entryPanel) entryPanel.style.display = "none";
   if (modePanel) modePanel.style.display = "block";
   if (joinTopHelp) joinTopHelp.textContent = "Choose a mode, then enter what's needed to start.";
-  if (entryHint) entryHint.textContent = "";
 }
 
 if (modeAiBtn) modeAiBtn.onclick = () => showEntry("ai");
 if (modePvpBtn) modePvpBtn.onclick = () => showEntry("pvp");
-if (backBtn) backBtn.onclick = () => showModeChooser();
+if (backBtn) backBtn.onclick = backToMode;
 
 function doJoin() {
   const name = (nameInput?.value || "").trim().slice(0, 16);
   const tableId = (tableInput?.value || "").trim().slice(0, 24);
 
+  const wantsAI =
+    joinMode === "ai"
+      ? true
+      : (joinMode === "pvp" ? false : !!vsAiInput?.checked);
+
   if (!name) { alert("Enter a name."); return; }
+  if (!wantsAI && !tableId) { alert("Enter a table code."); return; }
 
-  if (selectedMode === "pvp") {
-    if (!tableId) { alert("Enter a table code."); return; }
-    socket.emit("join_table", { tableId, name, vsAI: false });
-  } else if (selectedMode === "ai") {
-    // allow empty tableId; server can assign/derive
-    socket.emit("join_table", { tableId: "", name, vsAI: true });
-  } else {
-    alert("Choose a mode first.");
-    return;
-  }
-
+  socket.emit("join_table", { tableId, name, vsAI: wantsAI });
   if (joinOverlay) joinOverlay.style.display = "none";
 }
 
-// IMPORTANT: prevent form submit refresh (this is often the “stall”)
-if (joinForm) {
-  joinForm.addEventListener("submit", (e) => {
-    e.preventDefault();
-    doJoin();
-  });
-}
-
-if (nameJoinBtn) nameJoinBtn.onclick = (e) => {
-  // in case browser triggers click before submit handler
-  e?.preventDefault?.();
-  doJoin();
-};
+// Submit handler for iOS friendliness
+if (nameJoinBtn) nameJoinBtn.onclick = (e) => { e?.preventDefault?.(); doJoin(); };
+if (joinForm) joinForm.addEventListener("submit", (e) => { e.preventDefault(); doJoin(); });
 
 if (nameInput) nameInput.addEventListener("keydown", (e)=>{ if (e.key === "Enter") doJoin(); });
 if (tableInput) tableInput.addEventListener("keydown", (e)=>{ if (e.key === "Enter") doJoin(); });

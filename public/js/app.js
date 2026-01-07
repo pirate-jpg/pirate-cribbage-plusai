@@ -2,6 +2,8 @@
 const socket = io();
 const el = (id) => document.getElementById(id);
 
+/* ===================== DOM REFERENCES ===================== */
+
 // Top chips
 const tableLine = el("tableLine");
 const meLine = el("meLine");
@@ -53,10 +55,7 @@ const ndTotal = el("ndTotal");
 const dTotal = el("dTotal");
 const cTotal = el("cTotal");
 
-// Toast
-const toast = el("toast");
-
-// Join overlay (mode UI)
+// Join overlay
 const joinOverlay = el("joinOverlay");
 const joinTopHelp = el("joinTopHelp");
 const modePanel = el("modePanel");
@@ -67,15 +66,9 @@ const backBtn = el("backBtn");
 const joinForm = el("joinForm");
 const entryHint = el("entryHint");
 const tableRow = el("tableRow");
-
 const nameInput = el("nameInput");
 const tableInput = el("tableInput");
 const nameJoinBtn = el("nameJoinBtn");
-
-// Generic modal (we reuse GO modal for discard prompts too)
-const goModal = el("goModal");
-const goModalText = el("goModalText");
-const goModalOk = el("goModalOk");
 
 // Game over modal
 const gameModal = el("gameModal");
@@ -83,72 +76,53 @@ const gameModalText = el("gameModalText");
 const gameModalNext = el("gameModalNext");
 const gameModalNewMatch = el("gameModalNewMatch");
 
+/* ===================== STATE ===================== */
+
 let state = null;
 let lastGoSeenTs = 0;
 let lastGameOverShownKey = "";
 
-// Discard popup: show once per discard stage
-let discardPopupShownForKey = "";
+/* ===================== PEGGING SCORE QUEUE ===================== */
 
-// Join behavior
-let joinMode = null; // "ai" | "pvp"
-let pendingJoin = false;
-
-/* ======================================================================
-   PEGGING SCORING DISPLAY FIX
-   Problem: AI can play so fast that state updates overwrite lastPegEvent
-   before the player can read it.
-   Solution: queue pegging score messages and display each for a minimum
-   duration, independent of how quickly new states arrive.
-   ====================================================================== */
-
-const PEG_SCORE_MIN_MS = 1500; // <— increase/decrease here
+const PEG_SCORE_MIN_MS = 1500;
 let pegScoreQueue = [];
-let pegScoreActiveUntil = 0;
 let pegScoreTimer = null;
-let lastPegEventSignatureSeen = "";
+let pegScoreActiveUntil = 0;
+let lastPegSig = "";
 
-function pegEventSignature(ev, s) {
-  // Server lastPegEvent has no timestamp; make a signature that changes per play.
-  const reasons = (ev?.reasons || []).join("|");
-  const p1 = s?.scores?.PLAYER1 ?? 0;
-  const p2 = s?.scores?.PLAYER2 ?? 0;
-  const count = s?.peg?.count ?? 0;
-  const pileLen = s?.peg?.pile?.length ?? 0;
-  return `${ev?.player || ""}|${ev?.pts || 0}|${reasons}|${count}|${pileLen}|${p1}|${p2}`;
+function pegSig(ev, s) {
+  const r = (ev?.reasons || []).join("|");
+  return `${ev?.player}|${ev?.pts}|${r}|${s?.peg?.count}|${s?.peg?.pile?.length}|${s?.scores?.PLAYER1}|${s?.scores?.PLAYER2}`;
 }
 
-function showPegScoreNow(text) {
-  if (!lastScore) return;
-  lastScore.textContent = text;
-  lastScore.classList.remove("hidden");
-}
-
-function hidePegScore() {
-  if (!lastScore) return;
-  lastScore.classList.add("hidden");
-}
-
-function resetPegScoreQueue() {
+function resetPegQueue() {
   pegScoreQueue = [];
-  pegScoreActiveUntil = 0;
-  lastPegEventSignatureSeen = "";
-  if (pegScoreTimer) {
-    clearTimeout(pegScoreTimer);
-    pegScoreTimer = null;
-  }
-  hidePegScore();
+  lastPegSig = "";
+  if (pegScoreTimer) clearTimeout(pegScoreTimer);
+  pegScoreTimer = null;
+  lastScore?.classList.add("hidden");
 }
 
-function schedulePegScoreDrain() {
-  if (pegScoreTimer) clearTimeout(pegScoreTimer);
+function enqueuePegScore(s) {
+  const ev = s.lastPegEvent;
+  if (!ev || !ev.pts) return;
+
+  const sig = pegSig(ev, s);
+  if (sig === lastPegSig) return;
+  lastPegSig = sig;
+
+  const who = ev.player === s.me ? "You" : "Opponent";
+  pegScoreQueue.push(`${who} scored +${ev.pts} (${ev.reasons.join(", ")})`);
+
+  drainPegQueue();
+}
+
+function drainPegQueue() {
+  if (pegScoreTimer) return;
 
   const tick = () => {
-    pegScoreTimer = null;
-
-    // If we’re not in pegging anymore, stop.
     if (!state || state.stage !== "pegging") {
-      resetPegScoreQueue();
+      resetPegQueue();
       return;
     }
 
@@ -158,13 +132,14 @@ function schedulePegScoreDrain() {
       return;
     }
 
-    if (pegScoreQueue.length === 0) {
-      hidePegScore();
+    if (!pegScoreQueue.length) {
+      lastScore?.classList.add("hidden");
+      pegScoreTimer = null;
       return;
     }
 
-    const next = pegScoreQueue.shift();
-    showPegScoreNow(next);
+    lastScore.textContent = pegScoreQueue.shift();
+    lastScore.classList.remove("hidden");
     pegScoreActiveUntil = Date.now() + PEG_SCORE_MIN_MS;
     pegScoreTimer = setTimeout(tick, PEG_SCORE_MIN_MS);
   };
@@ -172,284 +147,37 @@ function schedulePegScoreDrain() {
   tick();
 }
 
-function enqueuePegScoreFromState(s) {
-  if (!s || s.stage !== "pegging") return;
+/* ===================== HELPERS ===================== */
 
-  const ev = s.lastPegEvent;
-  if (!ev || !ev.pts || ev.pts <= 0) return;
-
-  const sig = pegEventSignature(ev, s);
-  if (sig === lastPegEventSignatureSeen) return;
-  lastPegEventSignatureSeen = sig;
-
-  const who = (ev.player === s.me) ? "You" : "Opponent";
-  const reasonText = (ev.reasons || []).join(", ");
-  pegScoreQueue.push(`${who} scored +${ev.pts} (${reasonText})`);
-
-  schedulePegScoreDrain();
+function cardValue(r) {
+  if (r === "A") return 1;
+  if (["K", "Q", "J"].includes(r)) return 10;
+  return parseInt(r, 10);
 }
 
-/* ====================================================================== */
-
-function cardValue(rank) {
-  if (rank === "A") return 1;
-  if (["K", "Q", "J"].includes(rank)) return 10;
-  return parseInt(rank, 10);
-}
-
-function suitClass(suit) {
-  return (suit === "♥" || suit === "♦") ? "red" : "black";
+function suitClass(s) {
+  return s === "♥" || s === "♦" ? "red" : "black";
 }
 
 function makeCardButton(card, opts = {}) {
-  const btn = document.createElement("button");
-  btn.className = `cardBtn ${suitClass(card.suit)}`;
-  if (opts.selected) btn.classList.add("selected");
-  if (opts.disabled) btn.disabled = true;
+  const b = document.createElement("button");
+  b.className = `cardBtn ${suitClass(card.suit)}`;
+  if (opts.disabled) b.disabled = true;
+  b.onclick = opts.onClick || null;
 
-  const corner1 = document.createElement("div");
-  corner1.className = "corner";
-  corner1.textContent = card.rank;
-
-  const big = document.createElement("div");
-  big.className = "suitBig";
-  big.textContent = card.suit;
-
-  const corner2 = document.createElement("div");
-  corner2.className = "corner bottom";
-  corner2.textContent = card.rank;
-
-  btn.append(corner1, big, corner2);
-
-  if (opts.onClick) btn.onclick = opts.onClick;
-  return btn;
-}
-
-function clamp(n, min, max) {
-  return Math.max(min, Math.min(max, n));
-}
-
-function initTicksOnce() {
-  if (!ticks) return;
-  if (ticks.childElementCount > 0) return;
-  [0, 30, 60, 90, 121].forEach(n => {
-    const span = document.createElement("span");
-    span.textContent = String(n);
-    ticks.appendChild(span);
-  });
-}
-
-function setPegPosition(pegEl, score) {
-  const s = clamp(score, 0, 121);
-  const pct = (s / 121) * 100;
-  pegEl.style.left = `${pct}%`;
+  b.innerHTML = `
+    <div class="corner">${card.rank}</div>
+    <div class="suitBig">${card.suit}</div>
+    <div class="corner bottom">${card.rank}</div>
+  `;
+  return b;
 }
 
 function playerName(p) {
-  if (!state) return p;
-  return state.players?.[p] || p;
+  return state?.players?.[p] || p;
 }
 
-function renderBoard() {
-  if (!state) return;
-
-  p1Label.textContent = state.players.PLAYER1 || "P1";
-  p2Label.textContent = state.players.PLAYER2 || "P2";
-
-  setPegPosition(p1Peg, state.scores.PLAYER1);
-  setPegPosition(p2Peg, state.scores.PLAYER2);
-}
-
-function showToast(msg) {
-  if (!toast) return;
-  toast.textContent = msg;
-  toast.classList.add("show");
-  clearTimeout(showToast._t);
-  showToast._t = setTimeout(() => toast.classList.remove("show"), 2200);
-}
-
-function showModal(modalEl) {
-  if (!modalEl) return;
-  modalEl.classList.remove("hidden");
-}
-
-function hideModal(modalEl) {
-  if (!modalEl) return;
-  modalEl.classList.add("hidden");
-}
-
-function showInfoModalAfterPaint(text) {
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => {
-      goModalText.textContent = text;
-      showModal(goModal);
-    });
-  });
-}
-
-if (goModalOk) goModalOk.onclick = () => hideModal(goModal);
-
-// GO modal: show ONLY when opponent says GO
-function maybeShowGoModal() {
-  const ge = state?.lastGoEvent;
-  if (!ge || !ge.ts) return;
-  if (ge.ts === lastGoSeenTs) return;
-
-  lastGoSeenTs = ge.ts;
-  if (ge.player === state.me) return;
-
-  goModalText.textContent = "Opponent said GO";
-  showModal(goModal);
-}
-
-function maybeShowGameOverModal() {
-  if (!state) return;
-  if (state.stage !== "show") return;
-  if (!state.gameOver) return;
-
-  const key = `${state.tableId}|${state.matchWins?.PLAYER1 ?? 0}|${state.matchWins?.PLAYER2 ?? 0}|${state.scores?.PLAYER1 ?? 0}|${state.scores?.PLAYER2 ?? 0}|${state.gameWinner ?? ""}|${state.matchOver ? "M" : "G"}`;
-  if (key === lastGameOverShownKey) return;
-  lastGameOverShownKey = key;
-
-  const winnerName = playerName(state.gameWinner);
-  if (state.matchOver) {
-    const matchWinnerName = playerName(state.matchWinner);
-    gameModalText.textContent = `${winnerName} won this game.\n\n${matchWinnerName} wins the match (best of 3).`;
-    gameModalNewMatch.style.display = "inline-block";
-    gameModalNext.textContent = "Next Game";
-  } else {
-    gameModalText.textContent = `${winnerName} won this game.\n\nPress Next Game when you’re ready.`;
-    gameModalNewMatch.style.display = "none";
-    gameModalNext.textContent = "Next Game";
-  }
-
-  showModal(gameModal);
-}
-
-if (gameModalNext) {
-  gameModalNext.onclick = () => {
-    hideModal(gameModal);
-    socket.emit("next_hand");
-  };
-}
-if (gameModalNewMatch) {
-  gameModalNewMatch.onclick = () => {
-    hideModal(gameModal);
-    socket.emit("new_match");
-  };
-}
-
-function clearPeggingPanelsForShowOrNonPegging() {
-  if (pileArea) pileArea.innerHTML = "";
-  if (peggingStatus) peggingStatus.textContent = "";
-  // Do NOT blindly hide lastScore here; pegging queue controls it.
-  // But for non-pegging stages we will resetPegScoreQueue() anyway.
-}
-
-function renderPileAndHud() {
-  if (!state) return;
-
-  if (countNum) countNum.textContent = String(state.peg?.count ?? 0);
-
-  if (state.stage !== "pegging") {
-    clearPeggingPanelsForShowOrNonPegging();
-    resetPegScoreQueue();
-    return;
-  }
-
-  if (pileArea) {
-    pileArea.innerHTML = "";
-    const pile = state.peg?.pile || [];
-    const show = pile.length > 10 ? pile.slice(pile.length - 10) : pile;
-    for (const c of show) {
-      pileArea.appendChild(makeCardButton(c, { disabled: true }));
-    }
-  }
-
-  const myTurn = state.turn === state.me;
-  if (peggingStatus) peggingStatus.textContent = myTurn ? "Your turn" : "Opponent’s turn";
-
-  // ✅ queue pegging scoring messages so AI can’t “erase” them instantly
-  enqueuePegScoreFromState(state);
-
-  maybeShowGoModal();
-}
-
-function renderBreakdown(listEl, breakdown) {
-  listEl.innerHTML = "";
-  if (!breakdown || !breakdown.items || breakdown.items.length === 0) {
-    const li = document.createElement("li");
-    li.textContent = "No points.";
-    listEl.appendChild(li);
-    return;
-  }
-  for (const item of breakdown.items) {
-    const li = document.createElement("li");
-    li.textContent = `${item.label} = ${item.pts}`;
-    listEl.appendChild(li);
-  }
-}
-
-function renderShow() {
-  if (!state || state.stage !== "show" || !state.show) {
-    if (showPanel) showPanel.classList.add("hidden");
-    return;
-  }
-  if (showPanel) showPanel.classList.remove("hidden");
-
-  const cut = state.show.cut;
-  if (cutLine) cutLine.textContent = `Cut: ${cut.rank}${cut.suit}`;
-
-  const nonDealer = state.show.nonDealer;
-  const dealer = state.show.dealer;
-
-  if (ndTitle) ndTitle.textContent = `Non-dealer (${playerName(nonDealer)})`;
-  if (dTitle) dTitle.textContent = `Dealer (${playerName(dealer)})`;
-  if (cTitle) cTitle.textContent = `Crib (${playerName(dealer)})`;
-
-  ndCards.innerHTML = "";
-  dCards.innerHTML = "";
-  cCards.innerHTML = "";
-
-  const nd = state.show.hand[nonDealer];
-  const de = state.show.hand[dealer];
-  const cr = state.show.crib;
-
-  for (const c of nd.cards) ndCards.appendChild(makeCardButton(c, { disabled: true }));
-  ndCards.appendChild(makeCardButton(cut, { disabled: true }));
-
-  for (const c of de.cards) dCards.appendChild(makeCardButton(c, { disabled: true }));
-  dCards.appendChild(makeCardButton(cut, { disabled: true }));
-
-  for (const c of cr.cards) cCards.appendChild(makeCardButton(c, { disabled: true }));
-  cCards.appendChild(makeCardButton(cut, { disabled: true }));
-
-  renderBreakdown(ndBreak, nd.breakdown);
-  renderBreakdown(dBreak, de.breakdown);
-  renderBreakdown(cBreak, cr.breakdown);
-
-  ndTotal.textContent = `Total: ${nd.breakdown.total}`;
-  dTotal.textContent = `Total: ${de.breakdown.total}`;
-  cTotal.textContent = `Total: ${cr.breakdown.total}`;
-}
-
-function setNextHandProminence(on) {
-  if (!nextHandBtn) return;
-
-  if (on) {
-    nextHandBtn.style.fontSize = "20px";
-    nextHandBtn.style.padding = "14px 20px";
-    nextHandBtn.style.fontWeight = "800";
-    nextHandBtn.style.borderRadius = "14px";
-    nextHandBtn.style.minWidth = "170px";
-  } else {
-    nextHandBtn.style.fontSize = "";
-    nextHandBtn.style.padding = "";
-    nextHandBtn.style.fontWeight = "";
-    nextHandBtn.style.borderRadius = "";
-    nextHandBtn.style.minWidth = "";
-  }
-}
+/* ===================== RENDER ===================== */
 
 function render() {
   if (!state) return;
@@ -457,225 +185,92 @@ function render() {
   tableLine.textContent = `Table: ${state.tableId}`;
   meLine.textContent = `You: ${playerName(state.me)}`;
 
-  const p1 = state.players.PLAYER1 ? state.players.PLAYER1 : "—";
-  const p2 = state.players.PLAYER2 ? state.players.PLAYER2 : "—";
-  playersLine.textContent = `Players: ${p1} vs ${p2}`;
+  const p1 = playerName("PLAYER1");
+  const p2 = playerName("PLAYER2");
 
+  playersLine.textContent = `Players: ${p1} vs ${p2}`;
   stageLine.textContent = `Stage: ${state.stage}`;
   dealerLine.textContent = `Dealer: ${playerName(state.dealer)}`;
   turnLine.textContent = `Turn: ${playerName(state.turn)}`;
 
   scoreLine.textContent = `${p1} ${state.scores.PLAYER1} • ${p2} ${state.scores.PLAYER2}`;
-
-  const mw1 = state.matchWins?.PLAYER1 ?? 0;
-  const mw2 = state.matchWins?.PLAYER2 ?? 0;
-  matchLine.textContent = `Match (best of 3): ${p1} ${mw1} • ${p2} ${mw2}`;
-
-  cribLine.textContent =
-    `Crib (${playerName(state.dealer)}) • Discards: ${p1} ${state.discardsCount.PLAYER1}/2  ${p2} ${state.discardsCount.PLAYER2}/2`;
-
-  initTicksOnce();
-  renderBoard();
-  renderPileAndHud();
-  renderShow();
-
-  // buttons reset
-  discardBtn.style.display = "none";
-  goBtn.style.display = "none";
-  nextHandBtn.style.display = "none";
-  newMatchBtn.style.display = "none";
-  setNextHandProminence(false);
+  matchLine.textContent = `Match (best of 3): ${p1} ${state.matchWins.PLAYER1} • ${p2} ${state.matchWins.PLAYER2}`;
+  cribLine.textContent = `Crib (${playerName(state.dealer)})`;
 
   handArea.innerHTML = "";
+  peggingStatus.textContent = "";
 
-  if (state.stage === "lobby") {
-    discardPopupShownForKey = "";
-    handTitle.textContent = "Waiting for crew…";
-    handHelp.textContent = `If this is 2-player, open the same table code on the other device: "${state.tableId}".`;
-    showPanel.classList.add("hidden");
-    return;
-  }
-
+  /* ---------- DISCARD STAGE ---------- */
   if (state.stage === "discard") {
-    showPanel.classList.add("hidden");
-
     const cribOwner = playerName(state.dealer);
+    const myDiscarded = state.discardsCount[state.me];
+
     handTitle.textContent = "Discard";
-    handHelp.textContent = `Tap 2 cards to send to ${cribOwner}'s crib.`;
+    handHelp.textContent = "";
 
-    const myHand = state.myHand || [];
-    myHand.forEach(card => {
-      const btn = makeCardButton(card, {
-        onClick: () => socket.emit("discard_one", { cardId: card.id })
-      });
-      handArea.appendChild(btn);
-    });
-
-    const myDiscarded = state.discardsCount?.[state.me] ?? 0;
-    const key = `${state.tableId}|discard|${state.dealer}`;
-    if (myDiscarded === 0 && discardPopupShownForKey !== key) {
-      discardPopupShownForKey = key;
-      showInfoModalAfterPaint("Discard two cards to the crib.");
+    if (myDiscarded < 2) {
+      peggingStatus.innerHTML = `
+        <div style="
+          font-weight:900;
+          font-size:28px;
+          line-height:1.1;
+          color:#ff4d2e;
+          text-shadow:0 2px 10px rgba(0,0,0,.65);
+        ">
+          Tap two cards to discard to ${cribOwner}'s crib
+        </div>
+      `;
     }
 
+    state.myHand.forEach(c => {
+      handArea.appendChild(
+        makeCardButton(c, { onClick: () => socket.emit("discard_one", { cardId: c.id }) })
+      );
+    });
     return;
-  } else {
-    discardPopupShownForKey = "";
   }
 
+  /* ---------- PEGGING ---------- */
   if (state.stage === "pegging") {
-    showPanel.classList.add("hidden");
-
     handTitle.textContent = "Pegging";
-    handHelp.textContent = "Play a card without exceeding 31. If you can’t play, press GO.";
+    handHelp.textContent = "Play a card without exceeding 31.";
 
     const myTurn = state.turn === state.me;
-    const myHand = state.myHand || [];
-    const count = state.peg?.count ?? 0;
+    const count = state.peg.count;
 
-    myHand.forEach(card => {
-      const playable = myTurn && (count + cardValue(card.rank) <= 31);
-      const btn = makeCardButton(card, {
-        disabled: !playable,
-        onClick: () => socket.emit("play_card", { cardId: card.id })
-      });
-      handArea.appendChild(btn);
+    state.myHand.forEach(c => {
+      const playable = myTurn && count + cardValue(c.rank) <= 31;
+      handArea.appendChild(
+        makeCardButton(c, {
+          disabled: !playable,
+          onClick: () => socket.emit("play_card", { cardId: c.id })
+        })
+      );
     });
 
-    const canPlay = myHand.some(c => count + cardValue(c.rank) <= 31);
-    if (myTurn && myHand.length > 0 && !canPlay) {
-      goBtn.style.display = "inline-block";
-      goBtn.onclick = () => socket.emit("go");
-    }
-
+    enqueuePegScore(state);
     return;
   }
 
+  /* ---------- SHOW ---------- */
   if (state.stage === "show") {
-    clearPeggingPanelsForShowOrNonPegging();
-
     handTitle.textContent = "Show";
-    handHelp.textContent = state.gameOver
-      ? `${playerName(state.gameWinner)} won this game.`
-      : "See scoring below.";
+    handHelp.textContent = "See scoring below.";
 
     nextHandBtn.style.display = "inline-block";
-    setNextHandProminence(true);
     nextHandBtn.onclick = () => socket.emit("next_hand");
 
-    if (state.matchOver) {
-      newMatchBtn.style.display = "inline-block";
-      newMatchBtn.onclick = () => socket.emit("new_match");
-      handHelp.textContent = `${playerName(state.matchWinner)} wins the match (best of 3).`;
-    }
-
-    maybeShowGameOverModal();
     return;
   }
 }
 
-// -------------------- JOIN FLOW --------------------
-function setJoinUiEnabled(enabled) {
-  if (nameJoinBtn) nameJoinBtn.disabled = !enabled;
-  if (modeAiBtn) modeAiBtn.disabled = !enabled;
-  if (modePvpBtn) modePvpBtn.disabled = !enabled;
-  if (backBtn) backBtn.disabled = !enabled;
-  if (nameInput) nameInput.disabled = !enabled;
-  if (tableInput) tableInput.disabled = !enabled;
-}
+/* ===================== SOCKET ===================== */
 
-function showModePanel() {
-  modePanel.style.display = "block";
-  entryPanel.style.display = "none";
-  joinTopHelp.textContent = "Choose a mode, then enter what's needed to start.";
-  entryHint.textContent = "";
-  joinMode = null;
-  pendingJoin = false;
-  setJoinUiEnabled(true);
-}
-
-function showEntryPanel(mode) {
-  joinMode = mode;
-  modePanel.style.display = "none";
-  entryPanel.style.display = "block";
-  entryHint.textContent = "";
-
-  if (mode === "ai") {
-    joinTopHelp.textContent = "VS AI: enter your name, then Set Sail.";
-    tableRow.style.display = "none";
-  } else {
-    joinTopHelp.textContent = "VS Player: enter your name + a table code. Player 2 must enter the same table code.";
-    tableRow.style.display = "block";
-  }
-
-  setTimeout(() => nameInput && nameInput.focus(), 50);
-}
-
-function doJoinFromModeUI() {
-  const name = (nameInput?.value || "").trim().slice(0, 16);
-  const tableId = (tableInput?.value || "").trim().slice(0, 24);
-
-  if (!socket.connected) {
-    entryHint.textContent = "Socket disconnected. Refresh and try again.";
-    return;
-  }
-
-  if (!name) { showInfoModalAfterPaint("Enter a name."); return; }
-  if (joinMode !== "ai" && !tableId) { showInfoModalAfterPaint("Enter a table code."); return; }
-  if (!joinMode) { showInfoModalAfterPaint("Choose a mode."); return; }
-
-  pendingJoin = true;
-  setJoinUiEnabled(false);
-  entryHint.textContent = "Joining…";
-
-  const vsAI = (joinMode === "ai");
-  socket.emit("join_table", { tableId: vsAI ? "" : tableId, name, vsAI });
-  // Do NOT hide overlay yet; hide it after first state arrives.
-}
-
-if (modeAiBtn) modeAiBtn.onclick = () => showEntryPanel("ai");
-if (modePvpBtn) modePvpBtn.onclick = () => showEntryPanel("pvp");
-if (backBtn) backBtn.onclick = () => showModePanel();
-
-if (joinForm) {
-  joinForm.addEventListener("submit", (e) => {
-    e.preventDefault();
-    doJoinFromModeUI();
-  });
-} else if (nameJoinBtn) {
-  nameJoinBtn.onclick = doJoinFromModeUI;
-}
-
-if (joinOverlay) showModePanel();
-
-socket.on("connect", () => {
-  if (pendingJoin) entryHint.textContent = "Joining…";
-});
-socket.on("disconnect", () => {
-  if (joinOverlay) {
-    joinOverlay.style.display = "block";
-    entryHint.textContent = "Socket disconnected. Refresh and try again.";
-    setJoinUiEnabled(true);
-    pendingJoin = false;
-  }
-});
-
-socket.on("state", (s) => {
+socket.on("state", s => {
   state = s;
-
-  // first successful join: hide overlay
-  if (pendingJoin && joinOverlay) {
-    joinOverlay.style.display = "none";
-    pendingJoin = false;
-    setJoinUiEnabled(true);
-  }
-
   render();
 });
 
-socket.on("error_msg", (msg) => {
-  if (joinOverlay) joinOverlay.style.display = "block";
-  entryHint.textContent = String(msg || "Join failed.");
-  pendingJoin = false;
-  setJoinUiEnabled(true);
+socket.on("error_msg", msg => {
+  entryHint.textContent = msg;
 });

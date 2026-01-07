@@ -271,6 +271,7 @@ function resetForNewGame(t) {
 
   t.peg = { count: 0, pile: [], passed: { PLAYER1: false, PLAYER2: false }, lastPlayer: null };
 
+  // NEW GAME: flip dealer
   t.dealer = otherPlayer(t.dealer);
   t.turn = t.dealer;
 
@@ -742,6 +743,13 @@ io.on("connection", (socket) => {
     if (t.matchOver) {
       emitStateToTable(t);
       return;
+    }
+
+    // ✅ IMPORTANT FIX:
+    // Dealer (and thus crib owner) should alternate EVERY HAND, not only when a game ends.
+    // When leaving "show" and starting the next hand in the same game, flip dealer now.
+    if (!t.gameOver && t.stage === "show") {
+      t.dealer = otherPlayer(t.dealer);
     }
 
     if (t.gameOver) resetForNewGame(t);

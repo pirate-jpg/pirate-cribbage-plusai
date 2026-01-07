@@ -1,4 +1,3 @@
-// server.js
 "use strict";
 
 const path = require("path");
@@ -352,7 +351,7 @@ function emitStateToTable(t) {
 }
 
 // ======================================================================
-// AI (STEP-BY-STEP WITH DELAY)  ✅ RESTORES THE LOST TIMING
+// AI (STEP-BY-STEP WITH DELAY)
 // ======================================================================
 
 const AI_DELAY_MS = 900;
@@ -394,6 +393,10 @@ function scheduleAi(t) {
 
   const handle = setTimeout(() => {
     aiTimers.delete(t.tableId);
+
+    // table may have ended since scheduling
+    if (!t.ai.enabled || t.matchOver || t.gameOver) return;
+
     const did = aiActOnce(t);
 
     // Always emit after the AI step so client can render intermediate states
@@ -438,6 +441,7 @@ function aiActOnce(t) {
       if (!pick) return false;
       const ok = internalDiscardOne(t, ap, pick.id);
       if (!ok) return false;
+
       // if both now done, advance immediately (still counts as this "one step")
       if (t.discardsCount.PLAYER1 === 2 && t.discardsCount.PLAYER2 === 2) beginPegging(t);
       return true;
@@ -488,6 +492,8 @@ function beginPegging(t) {
   t.cut = t.deck.splice(0, 1)[0];
   if (t.cut.rank === "J") {
     t.scores[t.dealer] += 2;
+    // If someone hits 121 on knobs, end immediately (avoid deadlock)
+    if (maybeEndGameOrMatch(t)) return;
   }
 
   t.peg = {
@@ -568,6 +574,11 @@ function maybeAdvanceToShow(t) {
   return true;
 }
 
+/**
+ * ✅ Critical fix:
+ * If someone reaches 121 mid-pegging, we must *transition off pegging*
+ * so the client can show Game Over / Next Game, instead of dead-locking.
+ */
 function maybeEndGameOrMatch(t) {
   const p1 = t.scores.PLAYER1;
   const p2 = t.scores.PLAYER2;
@@ -584,6 +595,18 @@ function maybeEndGameOrMatch(t) {
   if (t.matchWins[t.gameWinner] >= 2) {
     t.matchOver = true;
     t.matchWinner = t.gameWinner;
+  }
+
+  // stop any queued AI actions immediately
+  clearAiTimer(t);
+
+  // force UI into a safe end-state (client already knows how to handle "show")
+  if (t.stage !== "show") {
+    t.stage = "show";
+    t.turn = t.dealer;
+    // NOTE: we intentionally do NOT compute show scoring if game ends mid-pegging.
+    // In cribbage, the game ends immediately when a player pegs out.
+    t.show = t.show || null;
   }
 
   return true;
@@ -621,6 +644,9 @@ function internalPlayCard(t, player, cardId) {
     t.turn = otherPlayer(player);
   }
 
+  // ✅ end immediately if someone pegged out
+  if (maybeEndGameOrMatch(t)) return true;
+
   maybeAdvanceToShow(t);
   maybeEndGameOrMatch(t);
 
@@ -641,6 +667,9 @@ function internalGo(t, player) {
   t.turn = otherPlayer(player);
 
   maybeEndCountAndReset(t);
+
+  // ✅ end immediately if "go point" pegged someone out
+  if (maybeEndGameOrMatch(t)) return true;
 
   maybeAdvanceToShow(t);
   maybeEndGameOrMatch(t);
@@ -811,8 +840,6 @@ io.on("connection", (socket) => {
       for (const p of ["PLAYER1", "PLAYER2"]) {
         if (t.sockets[p] === socket.id) t.sockets[p] = null;
       }
-      // Don't necessarily clear AI timer on disconnect; table may still be active with other seat.
-      // But if AI was running and no human is connected, it's harmless.
     }
   });
 });

@@ -1,4 +1,3 @@
-// public/js/app.js
 const socket = io();
 const el = (id) => document.getElementById(id);
 
@@ -137,7 +136,6 @@ function drainPegQueue() {
   if (pegScoreTimer) return;
 
   const tick = () => {
-    // stop if not pegging
     if (!state || state.stage !== "pegging") {
       resetPegQueue();
       return;
@@ -258,9 +256,12 @@ function maybeShowGoModal() {
   showModal(goModal);
 }
 
+/**
+ * ✅ Safety: show Game Over modal even if a game ends outside "show"
+ * (server now forces stage="show", but this prevents future deadlocks).
+ */
 function maybeShowGameOverModal() {
   if (!state) return;
-  if (state.stage !== "show") return;
   if (!state.gameOver) return;
 
   const key =
@@ -306,7 +307,6 @@ if (gameModalNewMatch) {
 function clearPeggingPanelsForNonPegging() {
   if (pileArea) pileArea.innerHTML = "";
   if (peggingStatus) peggingStatus.textContent = "";
-  // pegging score queue controls lastScore; reset it outside pegging
 }
 
 function renderPileAndHud() {
@@ -320,7 +320,6 @@ function renderPileAndHud() {
     return;
   }
 
-  // pile
   if (pileArea) {
     pileArea.innerHTML = "";
     const pile = state.peg?.pile || [];
@@ -330,7 +329,6 @@ function renderPileAndHud() {
     }
   }
 
-  // pegging status
   const myTurn = state.turn === state.me;
   if (peggingStatus) peggingStatus.textContent = myTurn ? "Your turn" : "Opponent’s turn";
 
@@ -379,7 +377,11 @@ function render() {
 
   if (handArea) handArea.innerHTML = "";
 
-  // stage-specific
+  // ✅ Always allow the modal to appear if gameOver (no matter the stage)
+  if (state.gameOver) {
+    maybeShowGameOverModal();
+  }
+
   if (state.stage === "lobby") {
     if (handTitle) handTitle.textContent = "Waiting for crew…";
     if (handHelp) handHelp.textContent =
@@ -397,7 +399,6 @@ function render() {
     if (handTitle) handTitle.textContent = "Discard";
     if (handHelp) handHelp.textContent = "";
 
-    // ✅ PROMINENT, NON-DISMISSABLE BANNER in Pegging Status area
     if (peggingStatus) {
       if (myDiscarded < 2) {
         peggingStatus.innerHTML = `
@@ -484,6 +485,7 @@ function render() {
       }
     }
 
+    // still fine (also called earlier if gameOver)
     maybeShowGameOverModal();
     return;
   }
@@ -560,7 +562,6 @@ function doJoinFromModeUI() {
 
   const vsAI = (joinMode === "ai");
   socket.emit("join_table", { tableId: vsAI ? "" : tableId, name, vsAI });
-  // Do NOT hide overlay yet; hide it after first state arrives.
 }
 
 if (modeAiBtn) modeAiBtn.onclick = () => showEntryPanel("ai");
@@ -596,7 +597,6 @@ socket.on("disconnect", () => {
 socket.on("state", (s) => {
   state = s;
 
-  // first successful join: hide overlay
   if (pendingJoin && joinOverlay) {
     joinOverlay.style.display = "none";
     pendingJoin = false;

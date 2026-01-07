@@ -72,7 +72,7 @@ const nameInput = el("nameInput");
 const tableInput = el("tableInput");
 const nameJoinBtn = el("nameJoinBtn");
 
-// GO modal
+// Generic modal (we reuse GO modal for discard prompts too)
 const goModal = el("goModal");
 const goModalText = el("goModalText");
 const goModalOk = el("goModalOk");
@@ -181,6 +181,19 @@ function hideModal(modalEl) {
   modalEl.classList.add("hidden");
 }
 
+function showInfoModalAfterPaint(text) {
+  // We want the cards (DOM) to paint BEFORE we show the modal.
+  // Double rAF is a common way to ensure at least one paint happens.
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      goModalText.textContent = text;
+      showModal(goModal);
+    });
+  });
+}
+
+if (goModalOk) goModalOk.onclick = () => hideModal(goModal);
+
 // GO modal: show ONLY when opponent says GO
 function maybeShowGoModal() {
   const ge = state?.lastGoEvent;
@@ -193,8 +206,6 @@ function maybeShowGoModal() {
   goModalText.textContent = "Opponent said GO";
   showModal(goModal);
 }
-
-if (goModalOk) goModalOk.onclick = () => hideModal(goModal);
 
 function maybeShowGameOverModal() {
   if (!state) return;
@@ -404,14 +415,6 @@ function render() {
     handTitle.textContent = "Discard";
     handHelp.textContent = `Tap 2 cards to send to ${cribOwner}'s crib.`;
 
-    // popup only once (no “discard one more” popup)
-    const myDiscarded = state.discardsCount?.[state.me] ?? 0;
-    const key = `${state.tableId}|discard|${state.dealer}`;
-    if (myDiscarded === 0 && discardPopupShownForKey !== key) {
-      discardPopupShownForKey = key;
-      alert("Discard two cards to the crib.");
-    }
-
     const myHand = state.myHand || [];
     myHand.forEach(card => {
       const btn = makeCardButton(card, {
@@ -419,6 +422,14 @@ function render() {
       });
       handArea.appendChild(btn);
     });
+
+    // ✅ show prompt once, but AFTER cards are visible (no blocking alert)
+    const myDiscarded = state.discardsCount?.[state.me] ?? 0;
+    const key = `${state.tableId}|discard|${state.dealer}`;
+    if (myDiscarded === 0 && discardPopupShownForKey !== key) {
+      discardPopupShownForKey = key;
+      showInfoModalAfterPaint("Discard two cards to the crib.");
+    }
 
     return;
   } else {
@@ -522,9 +533,9 @@ function doJoinFromModeUI() {
     return;
   }
 
-  if (!name) { alert("Enter a name."); return; }
-  if (joinMode !== "ai" && !tableId) { alert("Enter a table code."); return; }
-  if (!joinMode) { alert("Choose a mode."); return; }
+  if (!name) { showInfoModalAfterPaint("Enter a name."); return; }
+  if (joinMode !== "ai" && !tableId) { showInfoModalAfterPaint("Enter a table code."); return; }
+  if (!joinMode) { showInfoModalAfterPaint("Choose a mode."); return; }
 
   pendingJoin = true;
   setJoinUiEnabled(false);
@@ -532,9 +543,7 @@ function doJoinFromModeUI() {
 
   const vsAI = (joinMode === "ai");
   socket.emit("join_table", { tableId: vsAI ? "" : tableId, name, vsAI });
-
-  // IMPORTANT: do NOT hide the overlay yet.
-  // We hide it only once the first 'state' arrives.
+  // Do NOT hide overlay yet; hide it after first state arrives.
 }
 
 if (modeAiBtn) modeAiBtn.onclick = () => showEntryPanel("ai");
@@ -552,7 +561,6 @@ if (joinForm) {
 
 if (joinOverlay) showModePanel();
 
-// socket lifecycle hints
 socket.on("connect", () => {
   if (pendingJoin) entryHint.textContent = "Joining…";
 });
@@ -579,7 +587,6 @@ socket.on("state", (s) => {
 });
 
 socket.on("error_msg", (msg) => {
-  // keep overlay visible, show message, re-enable
   if (joinOverlay) joinOverlay.style.display = "block";
   entryHint.textContent = String(msg || "Join failed.");
   pendingJoin = false;

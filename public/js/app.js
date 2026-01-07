@@ -94,6 +94,103 @@ let discardPopupShownForKey = "";
 let joinMode = null; // "ai" | "pvp"
 let pendingJoin = false;
 
+/* ======================================================================
+   PEGGING SCORING DISPLAY FIX
+   Problem: AI can play so fast that state updates overwrite lastPegEvent
+   before the player can read it.
+   Solution: queue pegging score messages and display each for a minimum
+   duration, independent of how quickly new states arrive.
+   ====================================================================== */
+
+const PEG_SCORE_MIN_MS = 1500; // <— increase/decrease here
+let pegScoreQueue = [];
+let pegScoreActiveUntil = 0;
+let pegScoreTimer = null;
+let lastPegEventSignatureSeen = "";
+
+function pegEventSignature(ev, s) {
+  // Server lastPegEvent has no timestamp; make a signature that changes per play.
+  const reasons = (ev?.reasons || []).join("|");
+  const p1 = s?.scores?.PLAYER1 ?? 0;
+  const p2 = s?.scores?.PLAYER2 ?? 0;
+  const count = s?.peg?.count ?? 0;
+  const pileLen = s?.peg?.pile?.length ?? 0;
+  return `${ev?.player || ""}|${ev?.pts || 0}|${reasons}|${count}|${pileLen}|${p1}|${p2}`;
+}
+
+function showPegScoreNow(text) {
+  if (!lastScore) return;
+  lastScore.textContent = text;
+  lastScore.classList.remove("hidden");
+}
+
+function hidePegScore() {
+  if (!lastScore) return;
+  lastScore.classList.add("hidden");
+}
+
+function resetPegScoreQueue() {
+  pegScoreQueue = [];
+  pegScoreActiveUntil = 0;
+  lastPegEventSignatureSeen = "";
+  if (pegScoreTimer) {
+    clearTimeout(pegScoreTimer);
+    pegScoreTimer = null;
+  }
+  hidePegScore();
+}
+
+function schedulePegScoreDrain() {
+  if (pegScoreTimer) clearTimeout(pegScoreTimer);
+
+  const tick = () => {
+    pegScoreTimer = null;
+
+    // If we’re not in pegging anymore, stop.
+    if (!state || state.stage !== "pegging") {
+      resetPegScoreQueue();
+      return;
+    }
+
+    const now = Date.now();
+    if (now < pegScoreActiveUntil) {
+      pegScoreTimer = setTimeout(tick, pegScoreActiveUntil - now);
+      return;
+    }
+
+    if (pegScoreQueue.length === 0) {
+      hidePegScore();
+      return;
+    }
+
+    const next = pegScoreQueue.shift();
+    showPegScoreNow(next);
+    pegScoreActiveUntil = Date.now() + PEG_SCORE_MIN_MS;
+    pegScoreTimer = setTimeout(tick, PEG_SCORE_MIN_MS);
+  };
+
+  tick();
+}
+
+function enqueuePegScoreFromState(s) {
+  if (!s || s.stage !== "pegging") return;
+
+  const ev = s.lastPegEvent;
+  if (!ev || !ev.pts || ev.pts <= 0) return;
+
+  const sig = pegEventSignature(ev, s);
+  if (sig === lastPegEventSignatureSeen) return;
+  lastPegEventSignatureSeen = sig;
+
+  const who = (ev.player === s.me) ? "You" : "Opponent";
+  const reasonText = (ev.reasons || []).join(", ");
+  pegScoreQueue.push(`${who} scored +${ev.pts} (${reasonText})`);
+
+  schedulePegScoreDrain();
+}
+
+/* ====================================================================== */
+
 function cardValue(rank) {
   if (rank === "A") return 1;
   if (["K", "Q", "J"].includes(rank)) return 10;
@@ -182,8 +279,6 @@ function hideModal(modalEl) {
 }
 
 function showInfoModalAfterPaint(text) {
-  // We want the cards (DOM) to paint BEFORE we show the modal.
-  // Double rAF is a common way to ensure at least one paint happens.
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
       goModalText.textContent = text;
@@ -247,7 +342,8 @@ if (gameModalNewMatch) {
 function clearPeggingPanelsForShowOrNonPegging() {
   if (pileArea) pileArea.innerHTML = "";
   if (peggingStatus) peggingStatus.textContent = "";
-  if (lastScore) lastScore.classList.add("hidden");
+  // Do NOT blindly hide lastScore here; pegging queue controls it.
+  // But for non-pegging stages we will resetPegScoreQueue() anyway.
 }
 
 function renderPileAndHud() {
@@ -257,6 +353,7 @@ function renderPileAndHud() {
 
   if (state.stage !== "pegging") {
     clearPeggingPanelsForShowOrNonPegging();
+    resetPegScoreQueue();
     return;
   }
 
@@ -272,17 +369,8 @@ function renderPileAndHud() {
   const myTurn = state.turn === state.me;
   if (peggingStatus) peggingStatus.textContent = myTurn ? "Your turn" : "Opponent’s turn";
 
-  const ev = state.lastPegEvent;
-  if (ev && ev.pts && ev.pts > 0) {
-    const who = (ev.player === state.me) ? "You" : "Opponent";
-    const reasonText = (ev.reasons || []).join(", ");
-    if (lastScore) {
-      lastScore.textContent = `${who} scored +${ev.pts} (${reasonText})`;
-      lastScore.classList.remove("hidden");
-    }
-  } else {
-    if (lastScore) lastScore.classList.add("hidden");
-  }
+  // ✅ queue pegging scoring messages so AI can’t “erase” them instantly
+  enqueuePegScoreFromState(state);
 
   maybeShowGoModal();
 }
@@ -423,7 +511,6 @@ function render() {
       handArea.appendChild(btn);
     });
 
-    // ✅ show prompt once, but AFTER cards are visible (no blocking alert)
     const myDiscarded = state.discardsCount?.[state.me] ?? 0;
     const key = `${state.tableId}|discard|${state.dealer}`;
     if (myDiscarded === 0 && discardPopupShownForKey !== key) {

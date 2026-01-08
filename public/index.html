@@ -2,9 +2,14 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1, maximum-scale=1"
+  />
   <title>🏴‍☠️ Pirate Cribbage</title>
-  <link rel="stylesheet" href="/css/styles.css">
+
+  <!-- ✅ cache-bust so iOS doesn't keep the old CSS -->
+  <link rel="stylesheet" href="/css/styles.css?v=2">
 
   <style>
     body.has-dev-banner {
@@ -29,7 +34,6 @@
       display: none; /* enabled by script when BUILD_ENV=dev */
     }
 
-    /* Make sure the Join Overlay doesn't cover the fixed banner */
     body.has-dev-banner #joinOverlay.overlay {
       top: 34px;
       height: calc(100vh - 34px);
@@ -40,10 +44,8 @@
 <body>
   <div id="dev-banner">⚓ DEV BUILD — NOT THE FRIENDS VERSION ⚓</div>
 
-  <!-- TOAST -->
   <div id="toast" class="toast"></div>
 
-  <!-- DISCARD MODAL -->
   <div id="discardModal" class="modalOverlay hidden" role="dialog" aria-modal="true">
     <div class="modalCard">
       <div class="modalTitle">🧺 To the Crib</div>
@@ -52,7 +54,6 @@
     </div>
   </div>
 
-  <!-- GO MODAL -->
   <div id="goModal" class="modalOverlay hidden" role="dialog" aria-modal="true">
     <div class="modalCard">
       <div class="modalTitle">⚓ GO!</div>
@@ -61,7 +62,6 @@
     </div>
   </div>
 
-  <!-- GAME OVER MODAL -->
   <div id="gameModal" class="modalOverlay hidden" role="dialog" aria-modal="true">
     <div class="modalCard">
       <div class="modalTitle">🏁 Game Over</div>
@@ -73,13 +73,11 @@
     </div>
   </div>
 
-  <!-- JOIN OVERLAY -->
   <div id="joinOverlay" class="overlay">
     <div class="panel overlayCard">
       <h2 class="overlayTitle">🏴‍☠️ Set Sail</h2>
       <p id="joinTopHelp" class="overlayText">Choose a mode, then enter what's needed to start.</p>
 
-      <!-- MODE CHOOSER -->
       <div id="modePanel" style="display:block;">
         <button id="modeAiBtn" class="btn primary big" style="width:100%; margin-top:14px;">Play vs AI</button>
         <button id="modePvpBtn" class="btn primary big" style="width:100%; margin-top:12px;">Play vs Player</button>
@@ -89,10 +87,8 @@
         </div>
       </div>
 
-      <!-- ENTRY PANEL -->
       <div id="entryPanel" style="display:none; margin-top:8px;">
         <form id="joinForm" autocomplete="off">
-          <!-- Decoy fields (helps defeat iOS autofill) -->
           <input style="position:absolute; left:-9999px; top:-9999px; height:1px; width:1px; opacity:0;"
                  type="text" name="username" autocomplete="username" />
           <input style="position:absolute; left:-9999px; top:-9999px; height:1px; width:1px; opacity:0;"
@@ -158,7 +154,6 @@
   <main class="page">
     <section class="grid">
 
-      <!-- LEFT TOP: BOARD -->
       <section class="panel boardPanel woodFrame">
         <div class="panelHeader">
           <h2>Cribbage Board</h2>
@@ -183,7 +178,6 @@
         </div>
       </section>
 
-      <!-- LEFT BOTTOM: CREW -->
       <aside class="panel crewPanel">
         <div class="panelHeader">
           <h2>⚓ Crew</h2>
@@ -209,7 +203,6 @@
         <div class="mutedSmall" id="cribLine">Crib: —</div>
       </aside>
 
-      <!-- RIGHT: PLAY -->
       <section class="panel playPanel">
         <div class="panelHeader">
           <h2 id="handTitle">Waiting…</h2>
@@ -249,7 +242,6 @@
           <div id="handArea" class="handArea"></div>
         </div>
 
-        <!-- SHOW PANEL -->
         <div id="showPanel" class="panel showPanel hidden">
           <div class="panelHeader spread">
             <h2>Show</h2>
@@ -289,7 +281,6 @@
   <script src="/build-env.js"></script>
 
   <script>
-    // Show the banner only when Railway sets BUILD_ENV=dev
     (function () {
       const env = String(window.__BUILD_ENV__ || "").toLowerCase();
       const banner = document.getElementById("dev-banner");

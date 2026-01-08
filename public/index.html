@@ -5,26 +5,42 @@
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>🏴‍☠️ Pirate Cribbage</title>
   <link rel="stylesheet" href="/css/styles.css">
+
+  <style>
+    /* DEV BANNER — pinned above EVERYTHING */
+    body.has-dev-banner {
+      padding-top: 34px; /* make room for the fixed banner */
+    }
+    #dev-banner {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      width: 100%;
+      z-index: 2147483647; /* max-ish */
+      background: #7b1fa2;
+      color: #fff;
+      text-align: center;
+      padding: 6px 10px;
+      font-weight: 800;
+      letter-spacing: 1px;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      box-shadow: 0 2px 10px rgba(0,0,0,.35);
+      display: none; /* JS decides */
+    }
+
+    /* make sure overlays don't start under the banner */
+    body.has-dev-banner #joinOverlay.overlay {
+      top: 34px;
+      height: calc(100vh - 34px);
+    }
+  </style>
 </head>
 
 <body>
- <div id="dev-banner" style="
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 99999;
-  background: #7b1fa2;
-  color: white;
-  text-align: center;
-  padding: 8px 10px;
-  font-weight: 800;
-  letter-spacing: 1px;
-">
-  ⚓ DEV BUILD – V2 ⚓
-</div>
+  <!-- DEV BANNER (JS-controlled) -->
+  <div id="dev-banner">⚓ DEV BUILD V2 — NOT THE FRIENDS VERSION ⚓</div>
 
-<div style="height: 40px;"></div>
   <!-- TOAST -->
   <div id="toast" class="toast"></div>
 
@@ -269,6 +285,39 @@
 
     </section>
   </main>
+
+  <script>
+    (function () {
+      const banner = document.getElementById('dev-banner');
+      if (!banner) return;
+
+      const params = new URLSearchParams(window.location.search);
+      const forced = params.get('dev'); // "1" or "0"
+      const host = (window.location.hostname || '').toLowerCase();
+
+      // Heuristics: treat anything with "dev" in hostname as dev.
+      // Also treat localhost / 127.* as dev.
+      const looksDev =
+        host.includes('dev') ||
+        host.includes('localhost') ||
+        host.startsWith('127.');
+
+      // Force override:
+      // ?dev=1 => show everywhere
+      // ?dev=0 => hide everywhere
+      let show = looksDev;
+      if (forced === '1') show = true;
+      if (forced === '0') show = false;
+
+      if (show) {
+        banner.style.display = 'block';
+        document.body.classList.add('has-dev-banner');
+      } else {
+        banner.style.display = 'none';
+        document.body.classList.remove('has-dev-banner');
+      }
+    })();
+  </script>
 
   <script src="/socket.io/socket.io.js"></script>
   <script src="/js/app.js"></script>

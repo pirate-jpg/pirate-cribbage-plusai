@@ -11,6 +11,19 @@ const io = new Server(server);
 
 const PORT = process.env.PORT || 3000;
 
+// ============================================================
+// BUILD ENV INJECTION (for DEV banner)
+// In Railway:
+//   Dev service:  BUILD_ENV=dev
+//   Prod service: BUILD_ENV=prod   (or blank)
+// ============================================================
+app.get("/build-env.js", (_req, res) => {
+  res.type("application/javascript");
+  // keep it simple + safe for a single word env
+  const v = String(process.env.BUILD_ENV || "");
+  res.send(`window.__BUILD_ENV__ = ${JSON.stringify(v)};`);
+});
+
 // ---- static + health ----
 app.use(express.static(path.join(__dirname, "public")));
 app.get("/", (_req, res) => res.sendFile(path.join(__dirname, "public", "index.html")));

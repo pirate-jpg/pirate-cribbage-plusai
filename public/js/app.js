@@ -93,31 +93,63 @@ let lastGameOverShownKey = "";
 let joinMode = null; // "ai" | "pvp"
 let pendingJoin = false;
 
-/* ===================== iOS SAFARI VIEWPORT HARD RESET ===================== */
+/* ===================== OPTIONAL BOARD (HIDE BY DEFAULT ON PHONES) ===================== */
 /**
- * iOS Safari can “stick” in a zoomed visual-viewport state after focusing
- * an input (especially with AutoFill). This forces a blur + viewport reset.
+ * Default: hide board on phones to reduce clutter.
+ * Force show board by adding: ?board=1
  */
+(function initBoardVisibility() {
+  try {
+    const qs = new URLSearchParams(location.search);
+    const show = qs.get("board") === "1";
+    document.body.classList.toggle("hide-board", !show);
+  } catch (_) {}
+})();
+
+/* ===================== iOS SAFARI “STUCK ZOOM” HARDENING ===================== */
+/**
+ * iOS Safari can “stick” in a zoomed visual-viewport after focusing inputs.
+ * We do 3 things:
+ *  1) Ensure input font-size is 16px (in CSS)
+ *  2) Blur + scroll reset
+ *  3) Toggle viewport meta content to force a re-evaluation
+ */
+function setViewportContent(content) {
+  const vp = document.querySelector('meta[name="viewport"]') || el("vp");
+  if (!vp) return;
+  vp.setAttribute("content", content);
+}
+
 function hardResetViewport() {
   try {
-    // Blur any focused element
     if (document.activeElement && typeof document.activeElement.blur === "function") {
       document.activeElement.blur();
     }
     if (nameInput && typeof nameInput.blur === "function") nameInput.blur();
     if (tableInput && typeof tableInput.blur === "function") tableInput.blur();
 
-    // Reflow / scroll reset (Safari often snaps back after this)
+    // Meta viewport toggle trick
+    setViewportContent("width=device-width, initial-scale=1, viewport-fit=cover");
+    setTimeout(() => {
+      setViewportContent("width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover");
+    }, 50);
+
     requestAnimationFrame(() => {
       window.scrollTo(0, 0);
       document.documentElement.scrollTop = 0;
       document.body.scrollTop = 0;
 
-      // One more after the keyboard/AutoFill bar animates out
       setTimeout(() => {
         window.scrollTo(0, 0);
         document.documentElement.scrollTop = 0;
         document.body.scrollTop = 0;
+
+        // One last nudge after keyboard/autofill animation finishes
+        setTimeout(() => {
+          window.scrollTo(0, 0);
+          document.documentElement.scrollTop = 0;
+          document.body.scrollTop = 0;
+        }, 180);
       }, 120);
     });
   } catch (_) {
@@ -125,17 +157,29 @@ function hardResetViewport() {
   }
 }
 
-// If Safari viewport changes (keyboard/AutoFill), a later blur+reset helps
+// Help when visualViewport rebounds after keyboard close
 if (window.visualViewport) {
   window.visualViewport.addEventListener("resize", () => {
-    // when keyboard closes, height rebounds; a reset shortly after helps
     setTimeout(() => {
-      if (document.activeElement && (document.activeElement.tagName || "").toLowerCase() !== "input") {
-        hardResetViewport();
-      }
-    }, 180);
+      const tag = (document.activeElement?.tagName || "").toLowerCase();
+      if (tag !== "input" && tag !== "textarea") hardResetViewport();
+    }, 200);
   });
 }
+
+// If an input blurs, do a reset shortly after
+function wireInputBlurFix(inp) {
+  if (!inp) return;
+  inp.addEventListener("blur", () => setTimeout(hardResetViewport, 80));
+  inp.addEventListener("focus", () => {
+    // If something already got “stuck”, this can prevent compounding
+    setTimeout(() => {
+      setViewportContent("width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover");
+    }, 0);
+  });
+}
+wireInputBlurFix(nameInput);
+wireInputBlurFix(tableInput);
 
 /* ===================== PEGGING SCORE QUEUE ===================== */
 
@@ -427,7 +471,6 @@ function render() {
 
   if (handArea) handArea.innerHTML = "";
 
-  // ✅ Always allow the modal to appear if gameOver (no matter the stage)
   if (state.gameOver) {
     maybeShowGameOverModal();
   }
@@ -501,7 +544,10 @@ function render() {
     if (goBtn) {
       if (myTurn && myHand.length > 0 && !canPlay) {
         goBtn.style.display = "inline-block";
-        goBtn.onclick = () => socket.emit("go");
+        goBtn.onclick = () => {
+          hardResetViewport();
+          socket.emit("go");
+        };
       } else {
         goBtn.style.display = "none";
       }
@@ -541,7 +587,6 @@ function render() {
       }
     }
 
-    // still fine (also called earlier if gameOver)
     maybeShowGameOverModal();
     return;
   }
@@ -659,7 +704,6 @@ socket.on("state", (s) => {
   state = s;
 
   if (pendingJoin && joinOverlay) {
-    // hide overlay + reset viewport after the input session ends
     joinOverlay.style.display = "none";
     pendingJoin = false;
     setJoinUiEnabled(true);

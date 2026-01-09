@@ -68,11 +68,8 @@ const backBtn = el("backBtn");
 const joinForm = el("joinForm");
 const entryHint = el("entryHint");
 const tableRow = el("tableRow");
-
-// NOTE: these are now contenteditable DIVs, not INPUTs
 const nameInput = el("nameInput");
 const tableInput = el("tableInput");
-
 const nameJoinBtn = el("nameJoinBtn");
 
 // Generic modal (we reuse GO modal for discard prompts too)
@@ -97,103 +94,48 @@ let joinMode = null; // "ai" | "pvp"
 let pendingJoin = false;
 
 /* ===================== iOS SAFARI VIEWPORT HARD RESET ===================== */
-function setViewportContent(content) {
-  const vp = document.querySelector('meta[name="viewport"]') || el("vp");
-  if (!vp) return;
-  vp.setAttribute("content", content);
-}
-
+/**
+ * iOS Safari can “stick” in a zoomed visual-viewport state after focusing
+ * an input (especially with AutoFill). This forces a blur + viewport reset.
+ */
 function hardResetViewport() {
   try {
+    // Blur any focused element
     if (document.activeElement && typeof document.activeElement.blur === "function") {
       document.activeElement.blur();
     }
-    // blur contenteditable boxes
     if (nameInput && typeof nameInput.blur === "function") nameInput.blur();
     if (tableInput && typeof tableInput.blur === "function") tableInput.blur();
 
-    // meta viewport toggle trick
-    setViewportContent("width=device-width, initial-scale=1, viewport-fit=cover");
-    setTimeout(() => {
-      setViewportContent("width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover");
-    }, 50);
-
+    // Reflow / scroll reset (Safari often snaps back after this)
     requestAnimationFrame(() => {
       window.scrollTo(0, 0);
       document.documentElement.scrollTop = 0;
       document.body.scrollTop = 0;
 
+      // One more after the keyboard/AutoFill bar animates out
       setTimeout(() => {
         window.scrollTo(0, 0);
         document.documentElement.scrollTop = 0;
         document.body.scrollTop = 0;
       }, 120);
     });
-  } catch (_) {}
+  } catch (_) {
+    // no-op
+  }
 }
 
+// If Safari viewport changes (keyboard/AutoFill), a later blur+reset helps
 if (window.visualViewport) {
   window.visualViewport.addEventListener("resize", () => {
+    // when keyboard closes, height rebounds; a reset shortly after helps
     setTimeout(() => {
-      const tag = (document.activeElement?.tagName || "").toLowerCase();
-      // contenteditable shows as DIV, so just reset when not actively typing
-      if (tag !== "input" && tag !== "textarea") hardResetViewport();
-    }, 200);
+      if (document.activeElement && (document.activeElement.tagName || "").toLowerCase() !== "input") {
+        hardResetViewport();
+      }
+    }, 180);
   });
 }
-
-if (goModalOk) goModalOk.onclick = () => {
-  hideModal(goModal);
-  hardResetViewport();
-};
-
-/* ===================== contenteditable helpers ===================== */
-
-function sanitizeCE(elm, maxLen) {
-  if (!elm) return "";
-  // strip newlines and trim
-  let t = (elm.textContent || "").replace(/\s+/g, " ").trim();
-  if (maxLen && t.length > maxLen) t = t.slice(0, maxLen);
-  // enforce back into box so it doesn't keep extra characters
-  elm.textContent = t;
-  return t;
-}
-
-function wireCELimits(elm) {
-  if (!elm) return;
-  const maxLen = parseInt(elm.getAttribute("data-maxlen") || "0", 10) || 0;
-
-  elm.addEventListener("beforeinput", (e) => {
-    // prevent line breaks
-    if (e.inputType === "insertParagraph") {
-      e.preventDefault();
-      return;
-    }
-    if (!maxLen) return;
-
-    const cur = (elm.textContent || "");
-    // allow deletions
-    if (e.inputType && e.inputType.startsWith("delete")) return;
-
-    const incoming = e.data || "";
-    if ((cur + incoming).length > maxLen) {
-      e.preventDefault();
-    }
-  });
-
-  elm.addEventListener("input", () => sanitizeCE(elm, maxLen));
-
-  // optional: Enter submits
-  elm.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      doJoinFromModeUI();
-    }
-  });
-}
-
-wireCELimits(nameInput);
-wireCELimits(tableInput);
 
 /* ===================== PEGGING SCORE QUEUE ===================== */
 
@@ -344,6 +286,11 @@ function hideModal(modalEl) {
   modalEl.classList.add("hidden");
 }
 
+if (goModalOk) goModalOk.onclick = () => {
+  hideModal(goModal);
+  hardResetViewport();
+};
+
 function maybeShowGoModal() {
   const ge = state?.lastGoEvent;
   if (!ge || !ge.ts) return;
@@ -356,6 +303,10 @@ function maybeShowGoModal() {
   showModal(goModal);
 }
 
+/**
+ * ✅ Safety: show Game Over modal even if a game ends outside "show"
+ * (server now forces stage="show", but this prevents future deadlocks).
+ */
 function maybeShowGameOverModal() {
   if (!state) return;
   if (!state.gameOver) return;
@@ -468,6 +419,7 @@ function render() {
   renderBoard();
   renderPileAndHud();
 
+  // reset buttons each render
   if (discardBtn) discardBtn.style.display = "none";
   if (goBtn) goBtn.style.display = "none";
   if (nextHandBtn) nextHandBtn.style.display = "none";
@@ -475,7 +427,10 @@ function render() {
 
   if (handArea) handArea.innerHTML = "";
 
-  if (state.gameOver) maybeShowGameOverModal();
+  // ✅ Always allow the modal to appear if gameOver (no matter the stage)
+  if (state.gameOver) {
+    maybeShowGameOverModal();
+  }
 
   if (state.stage === "lobby") {
     if (handTitle) handTitle.textContent = "Waiting for crew…";
@@ -586,6 +541,7 @@ function render() {
       }
     }
 
+    // still fine (also called earlier if gameOver)
     maybeShowGameOverModal();
     return;
   }
@@ -598,10 +554,8 @@ function setJoinUiEnabled(enabled) {
   if (modeAiBtn) modeAiBtn.disabled = !enabled;
   if (modePvpBtn) modePvpBtn.disabled = !enabled;
   if (backBtn) backBtn.disabled = !enabled;
-
-  // contenteditable disable via attribute
-  if (nameInput) nameInput.setAttribute("contenteditable", enabled ? "true" : "false");
-  if (tableInput) tableInput.setAttribute("contenteditable", enabled ? "true" : "false");
+  if (nameInput) nameInput.disabled = !enabled;
+  if (tableInput) tableInput.disabled = !enabled;
 }
 
 function showModePanel() {
@@ -635,8 +589,8 @@ function showEntryPanel(mode) {
 }
 
 function doJoinFromModeUI() {
-  const name = sanitizeCE(nameInput, 16);
-  const tableId = sanitizeCE(tableInput, 24);
+  const name = (nameInput?.value || "").trim().slice(0, 16);
+  const tableId = (tableInput?.value || "").trim().slice(0, 24);
 
   if (!socket.connected) {
     if (entryHint) entryHint.textContent = "Socket disconnected. Refresh and try again.";
@@ -663,6 +617,7 @@ function doJoinFromModeUI() {
   setJoinUiEnabled(false);
   if (entryHint) entryHint.textContent = "Joining…";
 
+  // IMPORTANT: blur/reset before emit (helps iOS “stuck zoom”)
   hardResetViewport();
 
   const vsAI = (joinMode === "ai");
@@ -704,6 +659,7 @@ socket.on("state", (s) => {
   state = s;
 
   if (pendingJoin && joinOverlay) {
+    // hide overlay + reset viewport after the input session ends
     joinOverlay.style.display = "none";
     pendingJoin = false;
     setJoinUiEnabled(true);

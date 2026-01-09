@@ -3,16 +3,20 @@
 <head>
   <meta charset="UTF-8" />
   <!-- iOS Safari zoom/viewport hardening -->
-  <meta id="vp" name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
   <title>🏴‍☠️ Pirate Cribbage</title>
   <link rel="stylesheet" href="/css/styles.css">
 
   <style>
-    body.has-dev-banner { padding-top: 34px; }
+    body.has-dev-banner {
+      padding-top: 34px;
+    }
 
     #dev-banner {
       position: fixed;
-      top: 0; left: 0; right: 0;
+      top: 0;
+      left: 0;
+      right: 0;
       width: 100%;
       z-index: 2147483647;
       background: #7b1fa2;
@@ -97,33 +101,32 @@
 
           <div class="overlayRow">
             <div class="overlayLabel">Your name</div>
-
-            <!-- IMPORTANT: contenteditable avoids iOS AutoFill Contact + stuck zoom -->
-            <div
+            <input
               id="nameInput"
-              class="nameInput ceInput"
-              contenteditable="true"
-              role="textbox"
-              aria-label="Your name"
-              data-placeholder="Name"
-              data-maxlen="16"
+              class="nameInput"
+              maxlength="16"
+              placeholder="Name"
+              autocomplete="off"
+              autocorrect="off"
+              autocapitalize="words"
               spellcheck="false"
-            ></div>
+              inputmode="text"
+            />
           </div>
 
           <div class="overlayRow" id="tableRow" style="display:none;">
             <div class="overlayLabel">Table code</div>
-            <div
+            <input
               id="tableInput"
-              class="nameInput ceInput"
-              contenteditable="true"
-              role="textbox"
-              aria-label="Table code"
-              data-placeholder="Table code"
-              data-maxlen="24"
+              class="nameInput"
+              maxlength="24"
+              placeholder="Table code"
+              autocomplete="off"
+              autocorrect="off"
+              autocapitalize="characters"
               spellcheck="false"
-            ></div>
-
+              inputmode="text"
+            />
             <div class="overlayHint" style="margin-top:8px;">
               One player picks a table code. The other player must enter the exact same code.
             </div>

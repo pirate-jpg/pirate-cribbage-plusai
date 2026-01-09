@@ -8,15 +8,11 @@
   <link rel="stylesheet" href="/css/styles.css">
 
   <style>
-    body.has-dev-banner {
-      padding-top: 34px;
-    }
+    body.has-dev-banner { padding-top: 34px; }
 
     #dev-banner {
       position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
+      top: 0; left: 0; right: 0;
       width: 100%;
       z-index: 2147483647;
       background: #7b1fa2;
@@ -101,32 +97,33 @@
 
           <div class="overlayRow">
             <div class="overlayLabel">Your name</div>
-            <input
+
+            <!-- IMPORTANT: contenteditable avoids iOS AutoFill Contact + stuck zoom -->
+            <div
               id="nameInput"
-              class="nameInput"
-              maxlength="16"
-              placeholder="Name"
-              autocomplete="off"
-              autocorrect="off"
-              autocapitalize="words"
+              class="nameInput ceInput"
+              contenteditable="true"
+              role="textbox"
+              aria-label="Your name"
+              data-placeholder="Name"
+              data-maxlen="16"
               spellcheck="false"
-              inputmode="text"
-            />
+            ></div>
           </div>
 
           <div class="overlayRow" id="tableRow" style="display:none;">
             <div class="overlayLabel">Table code</div>
-            <input
+            <div
               id="tableInput"
-              class="nameInput"
-              maxlength="24"
-              placeholder="Table code"
-              autocomplete="off"
-              autocorrect="off"
-              autocapitalize="characters"
+              class="nameInput ceInput"
+              contenteditable="true"
+              role="textbox"
+              aria-label="Table code"
+              data-placeholder="Table code"
+              data-maxlen="24"
               spellcheck="false"
-              inputmode="text"
-            />
+            ></div>
+
             <div class="overlayHint" style="margin-top:8px;">
               One player picks a table code. The other player must enter the exact same code.
             </div>

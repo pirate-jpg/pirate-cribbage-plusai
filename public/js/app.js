@@ -68,8 +68,11 @@ const backBtn = el("backBtn");
 const joinForm = el("joinForm");
 const entryHint = el("entryHint");
 const tableRow = el("tableRow");
+
+// NOTE: these are now contenteditable DIVs, not INPUTs
 const nameInput = el("nameInput");
 const tableInput = el("tableInput");
+
 const nameJoinBtn = el("nameJoinBtn");
 
 // Generic modal (we reuse GO modal for discard prompts too)
@@ -93,27 +96,7 @@ let lastGameOverShownKey = "";
 let joinMode = null; // "ai" | "pvp"
 let pendingJoin = false;
 
-/* ===================== OPTIONAL BOARD (HIDE BY DEFAULT ON PHONES) ===================== */
-/**
- * Default: hide board on phones to reduce clutter.
- * Force show board by adding: ?board=1
- */
-(function initBoardVisibility() {
-  try {
-    const qs = new URLSearchParams(location.search);
-    const show = qs.get("board") === "1";
-    document.body.classList.toggle("hide-board", !show);
-  } catch (_) {}
-})();
-
-/* ===================== iOS SAFARI “STUCK ZOOM” HARDENING ===================== */
-/**
- * iOS Safari can “stick” in a zoomed visual-viewport after focusing inputs.
- * We do 3 things:
- *  1) Ensure input font-size is 16px (in CSS)
- *  2) Blur + scroll reset
- *  3) Toggle viewport meta content to force a re-evaluation
- */
+/* ===================== iOS SAFARI VIEWPORT HARD RESET ===================== */
 function setViewportContent(content) {
   const vp = document.querySelector('meta[name="viewport"]') || el("vp");
   if (!vp) return;
@@ -125,10 +108,11 @@ function hardResetViewport() {
     if (document.activeElement && typeof document.activeElement.blur === "function") {
       document.activeElement.blur();
     }
+    // blur contenteditable boxes
     if (nameInput && typeof nameInput.blur === "function") nameInput.blur();
     if (tableInput && typeof tableInput.blur === "function") tableInput.blur();
 
-    // Meta viewport toggle trick
+    // meta viewport toggle trick
     setViewportContent("width=device-width, initial-scale=1, viewport-fit=cover");
     setTimeout(() => {
       setViewportContent("width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover");
@@ -143,43 +127,73 @@ function hardResetViewport() {
         window.scrollTo(0, 0);
         document.documentElement.scrollTop = 0;
         document.body.scrollTop = 0;
-
-        // One last nudge after keyboard/autofill animation finishes
-        setTimeout(() => {
-          window.scrollTo(0, 0);
-          document.documentElement.scrollTop = 0;
-          document.body.scrollTop = 0;
-        }, 180);
       }, 120);
     });
-  } catch (_) {
-    // no-op
-  }
+  } catch (_) {}
 }
 
-// Help when visualViewport rebounds after keyboard close
 if (window.visualViewport) {
   window.visualViewport.addEventListener("resize", () => {
     setTimeout(() => {
       const tag = (document.activeElement?.tagName || "").toLowerCase();
+      // contenteditable shows as DIV, so just reset when not actively typing
       if (tag !== "input" && tag !== "textarea") hardResetViewport();
     }, 200);
   });
 }
 
-// If an input blurs, do a reset shortly after
-function wireInputBlurFix(inp) {
-  if (!inp) return;
-  inp.addEventListener("blur", () => setTimeout(hardResetViewport, 80));
-  inp.addEventListener("focus", () => {
-    // If something already got “stuck”, this can prevent compounding
-    setTimeout(() => {
-      setViewportContent("width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover");
-    }, 0);
+if (goModalOk) goModalOk.onclick = () => {
+  hideModal(goModal);
+  hardResetViewport();
+};
+
+/* ===================== contenteditable helpers ===================== */
+
+function sanitizeCE(elm, maxLen) {
+  if (!elm) return "";
+  // strip newlines and trim
+  let t = (elm.textContent || "").replace(/\s+/g, " ").trim();
+  if (maxLen && t.length > maxLen) t = t.slice(0, maxLen);
+  // enforce back into box so it doesn't keep extra characters
+  elm.textContent = t;
+  return t;
+}
+
+function wireCELimits(elm) {
+  if (!elm) return;
+  const maxLen = parseInt(elm.getAttribute("data-maxlen") || "0", 10) || 0;
+
+  elm.addEventListener("beforeinput", (e) => {
+    // prevent line breaks
+    if (e.inputType === "insertParagraph") {
+      e.preventDefault();
+      return;
+    }
+    if (!maxLen) return;
+
+    const cur = (elm.textContent || "");
+    // allow deletions
+    if (e.inputType && e.inputType.startsWith("delete")) return;
+
+    const incoming = e.data || "";
+    if ((cur + incoming).length > maxLen) {
+      e.preventDefault();
+    }
+  });
+
+  elm.addEventListener("input", () => sanitizeCE(elm, maxLen));
+
+  // optional: Enter submits
+  elm.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      doJoinFromModeUI();
+    }
   });
 }
-wireInputBlurFix(nameInput);
-wireInputBlurFix(tableInput);
+
+wireCELimits(nameInput);
+wireCELimits(tableInput);
 
 /* ===================== PEGGING SCORE QUEUE ===================== */
 
@@ -330,11 +344,6 @@ function hideModal(modalEl) {
   modalEl.classList.add("hidden");
 }
 
-if (goModalOk) goModalOk.onclick = () => {
-  hideModal(goModal);
-  hardResetViewport();
-};
-
 function maybeShowGoModal() {
   const ge = state?.lastGoEvent;
   if (!ge || !ge.ts) return;
@@ -347,10 +356,6 @@ function maybeShowGoModal() {
   showModal(goModal);
 }
 
-/**
- * ✅ Safety: show Game Over modal even if a game ends outside "show"
- * (server now forces stage="show", but this prevents future deadlocks).
- */
 function maybeShowGameOverModal() {
   if (!state) return;
   if (!state.gameOver) return;
@@ -463,7 +468,6 @@ function render() {
   renderBoard();
   renderPileAndHud();
 
-  // reset buttons each render
   if (discardBtn) discardBtn.style.display = "none";
   if (goBtn) goBtn.style.display = "none";
   if (nextHandBtn) nextHandBtn.style.display = "none";
@@ -471,9 +475,7 @@ function render() {
 
   if (handArea) handArea.innerHTML = "";
 
-  if (state.gameOver) {
-    maybeShowGameOverModal();
-  }
+  if (state.gameOver) maybeShowGameOverModal();
 
   if (state.stage === "lobby") {
     if (handTitle) handTitle.textContent = "Waiting for crew…";
@@ -544,10 +546,7 @@ function render() {
     if (goBtn) {
       if (myTurn && myHand.length > 0 && !canPlay) {
         goBtn.style.display = "inline-block";
-        goBtn.onclick = () => {
-          hardResetViewport();
-          socket.emit("go");
-        };
+        goBtn.onclick = () => socket.emit("go");
       } else {
         goBtn.style.display = "none";
       }
@@ -599,8 +598,10 @@ function setJoinUiEnabled(enabled) {
   if (modeAiBtn) modeAiBtn.disabled = !enabled;
   if (modePvpBtn) modePvpBtn.disabled = !enabled;
   if (backBtn) backBtn.disabled = !enabled;
-  if (nameInput) nameInput.disabled = !enabled;
-  if (tableInput) tableInput.disabled = !enabled;
+
+  // contenteditable disable via attribute
+  if (nameInput) nameInput.setAttribute("contenteditable", enabled ? "true" : "false");
+  if (tableInput) tableInput.setAttribute("contenteditable", enabled ? "true" : "false");
 }
 
 function showModePanel() {
@@ -634,8 +635,8 @@ function showEntryPanel(mode) {
 }
 
 function doJoinFromModeUI() {
-  const name = (nameInput?.value || "").trim().slice(0, 16);
-  const tableId = (tableInput?.value || "").trim().slice(0, 24);
+  const name = sanitizeCE(nameInput, 16);
+  const tableId = sanitizeCE(tableInput, 24);
 
   if (!socket.connected) {
     if (entryHint) entryHint.textContent = "Socket disconnected. Refresh and try again.";
@@ -662,7 +663,6 @@ function doJoinFromModeUI() {
   setJoinUiEnabled(false);
   if (entryHint) entryHint.textContent = "Joining…";
 
-  // IMPORTANT: blur/reset before emit (helps iOS “stuck zoom”)
   hardResetViewport();
 
   const vsAI = (joinMode === "ai");

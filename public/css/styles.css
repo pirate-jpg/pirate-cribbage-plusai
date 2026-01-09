@@ -14,12 +14,6 @@
 
 *{ box-sizing:border-box; }
 html,body{ height:100%; }
-
-/* ✅ iOS Safari: prevent weird text scaling/zoom behavior */
-html{
-  -webkit-text-size-adjust: 100%;
-}
-
 body{
   margin:0;
   color:var(--text);
@@ -52,7 +46,7 @@ body{
   background:#00000022;
 }
 
-/* Layout — standardized */
+/* Layout */
 .page{ padding:18px; }
 .grid{
   display:grid;
@@ -61,11 +55,6 @@ body{
   align-items:start;
   max-width: 1480px;
   margin: 0 auto;
-}
-.leftCol{
-  display:flex;
-  flex-direction:column;
-  gap:18px;
 }
 @media (max-width: 980px){
   .grid{ grid-template-columns: 1fr; }
@@ -82,9 +71,6 @@ body{
 .panelHeader{ display:flex; flex-direction:column; gap:4px; margin-bottom:12px; }
 .panelHeader h2{ margin:0; font-size:18px; }
 .mutedSmall{ color:var(--muted); font-size:12px; }
-.mutedInline{ color:var(--muted); font-size:12px; margin-left:6px; }
-
-.spread{ flex-direction:row; align-items:center; justify-content:space-between; }
 
 .miniRow{ display:flex; gap:8px; flex-wrap:wrap; margin:10px 0 14px; }
 .pill{
@@ -105,8 +91,6 @@ body{
 }
 .scoreTitle{ font-size:12px; color:var(--muted); margin-bottom:6px; }
 .scoreText{ font-size:16px; font-weight:900; }
-
-.crewButtons{ margin-top:12px; display:flex; gap:10px; flex-wrap:wrap; }
 
 /* Board */
 .woodFrame{
@@ -137,8 +121,6 @@ body{
   margin:10px 0;
   position:relative;
   overflow:hidden;
-  background:
-    repeating-linear-gradient(90deg, #ffffff0e 0 1px, transparent 1px 8px);
 }
 .peg{
   width:18px; height:18px;
@@ -146,38 +128,15 @@ body{
   position:absolute;
   top:50%;
   transform:translate(-50%,-50%);
-  border:2px solid #00000066;
-  box-shadow: 0 6px 12px #00000066;
 }
 .peg1{ background:#42d3ff; }
 .peg2{ background:#ff4aa8; }
 
-.tickRow{
-  display:flex;
-  justify-content:space-between;
-  font-size:11px;
-  color:#e8d9b8cc;
-  margin-top:8px;
-  padding:0 6px;
-}
-.legend{
-  display:flex;
-  gap:14px;
-  margin-top:10px;
-  font-size:12px;
-  color:var(--muted);
-}
-.dotLine{ display:flex; align-items:center; gap:8px; }
-.dot{ width:10px; height:10px; border-radius:50%; }
-.dot1{ background:#42d3ff; }
-.dot2{ background:#ff4aa8; }
-
-/* Gameplay panel */
+/* Gameplay */
 .hudRow{
   display:grid;
   grid-template-columns: 180px 1fr;
   gap:14px;
-  margin-bottom:12px;
 }
 @media (max-width: 520px){
   .hudRow{ grid-template-columns: 1fr; }
@@ -189,100 +148,16 @@ body{
   background:#00000022;
   padding:14px;
 }
-.countLabel{ font-size:12px; color:var(--muted); letter-spacing:1px; }
 .countNum{
   font-size:56px;
   font-weight:1000;
-  line-height:1;
-  margin-top:4px;
   color:var(--gold);
-  text-shadow: 0 10px 30px #00000088;
-}
-.countHint{ color:var(--muted); font-size:12px; margin-top:6px; }
-
-.statusBox{
-  border:1px solid var(--line);
-  border-radius:16px;
-  background:#00000022;
-  padding:14px;
-}
-.statusTitle{ font-size:12px; color:var(--muted); margin-bottom:6px; }
-.statusText{ font-size:15px; font-weight:800; }
-.lastScore{
-  margin-top:10px;
-  padding:10px 12px;
-  border-radius:12px;
-  border:1px solid #ffffff22;
-  background:#00000025;
-  color:#ffe8b0;
-  font-weight:1000;
-}
-.hidden{ display:none !important; }
-
-.pileBlock{
-  border:1px solid var(--line);
-  border-radius:16px;
-  padding:12px;
-  background:#00000018;
-  margin-bottom:12px;
-}
-.pileTitle{ font-size:12px; color:var(--muted); margin-bottom:10px; }
-.pileArea{ display:flex; gap:10px; flex-wrap:wrap; }
-
-/* Buttons */
-.btn{
-  border:1px solid #ffffff2a;
-  background:#00000022;
-  color:var(--text);
-  border-radius:12px;
-  padding:10px 14px;
-  cursor:pointer;
-  font-weight:900;
-}
-.btn:hover{ filter:brightness(1.06); }
-.btn.primary{
-  background: linear-gradient(180deg, #2c5b63 0%, #163743 100%);
-  border-color:#ffffff33;
-}
-.btn.ghost{ background:#00000010; }
-
-.btn.go{
-  background: linear-gradient(180deg, #ff7a4d 0%, var(--danger) 100%);
-  border-color:#00000055;
-  color:#1b0b08;
-  font-weight:1000;
-  padding:12px 20px;
-  border-radius:14px;
-  box-shadow: 0 10px 24px #00000066;
-}
-.btn.go:hover{ transform: translateY(-1px); }
-
-.btn.big{
-  padding:14px 18px;
-  font-size:18px;
-  border-radius:14px;
 }
 
-/* Hand */
-.handBlock{
-  border:1px solid var(--line);
-  border-radius:16px;
-  padding:12px;
-  background:#00000018;
-}
-.actionRow{
-  display:flex;
-  gap:10px;
-  flex-wrap:wrap;
-  align-items:center;
-  justify-content:flex-start;
-  margin-bottom:12px;
-}
 .handArea{
   display:flex;
   gap:14px;
   flex-wrap:wrap;
-  padding-top:6px;
 }
 
 /* Cards */
@@ -291,68 +166,18 @@ body{
   height:128px;
   border-radius:14px;
   border:2px solid #00000055;
-  background: #f4f0e6;
+  background:#f4f0e6;
   color:#111;
   box-shadow: 0 12px 30px #0000004a;
-  position:relative;
   cursor:pointer;
-  padding:0;
   touch-action: manipulation;
-  -webkit-tap-highlight-color: transparent;
 }
-.cardBtn:hover{ transform: translateY(-2px); }
-.cardBtn:disabled{ cursor:default; opacity:0.92; transform:none; }
-
-.cardBtn.red{ color:#b51f1f; }
-.cardBtn.black{ color:#111; }
-
-.cardBtn .corner{
-  position:absolute;
-  top:10px; left:10px;
-  font-weight:1000;
-  font-size:18px;
-}
-.cardBtn .corner.bottom{
-  top:auto; left:auto;
-  bottom:10px; right:10px;
-  transform: rotate(180deg);
-}
-.cardBtn .suitBig{
-  position:absolute;
-  inset:0;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  font-size:44px;
-  opacity:0.95;
-}
-
-/* Selection highlight (NO BLUE/WHITE) */
 .cardBtn.selected{
-  outline: 4px solid var(--amber);
-  outline-offset: 3px;
-  box-shadow:
-    0 0 0 2px #00000088,
-    0 18px 40px #00000066,
-    0 0 28px #e3a01855;
+  outline:4px solid var(--amber);
+  outline-offset:3px;
 }
 
-/* Show */
-.showPanel{ margin-top:14px; }
-.showGrid{
-  display:grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap:14px;
-}
-@media (max-width: 1200px){
-  .showGrid{ grid-template-columns: 1fr; }
-}
-.showCol h3{ margin:0 0 10px; }
-.cardRow{ display:flex; gap:10px; flex-wrap:wrap; margin-bottom:10px; }
-.breakList{ margin:0; padding-left:18px; color:var(--muted); }
-.totalLine{ margin-top:10px; font-weight:1000; color:var(--gold); }
-
-/* Overlay Join */
+/* Overlay */
 .overlay{
   position:fixed;
   inset:0;
@@ -369,56 +194,30 @@ body{
   padding:18px;
   box-shadow: var(--shadow);
 }
-.overlayTitle{ margin:0 0 6px; font-size:22px; }
-.overlayText{ margin:0 0 14px; color:var(--muted); }
-.overlayRow{ display:flex; flex-direction:column; gap:6px; margin-bottom:10px; }
-.overlayLabel{ font-size:12px; color:var(--muted); }
+.overlayTitle{ font-size:22px; }
+.overlayText{ color:var(--muted); }
 
-/* ✅ iOS Safari zoom fix: all form controls must be >=16px */
-input, textarea, select, button{ font-size:16px; }
-
+/* Inputs */
 .nameInput{
-  padding:12px 12px;
+  padding:12px;
   border-radius:12px;
   border:1px solid #ffffff2a;
   background:#00000022;
   color:var(--text);
   font-weight:900;
-  font-size:16px;     /* ✅ keep explicit */
-  line-height:1.25;
 }
 
-.checkRow{
-  display:flex;
-  align-items:center;
-  gap:10px;
-  margin: 10px 0 12px;
-  color: var(--text);
+/* Buttons */
+.btn{
+  border-radius:12px;
+  padding:10px 14px;
+  font-weight:900;
 }
-.toast{
-  position: fixed;
-  top: 14px;
-  left: 50%;
-  transform: translateX(-50%);
-  padding: 10px 14px;
-  border-radius: 12px;
-  background: rgba(20, 20, 20, 0.92);
-  color: #fff;
-  font-weight: 700;
-  letter-spacing: 0.2px;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 160ms ease, transform 160ms ease;
-  z-index: 9999;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+.btn.primary{
+  background: linear-gradient(180deg, #2c5b63 0%, #163743 100%);
 }
-.toast.show{
-  opacity: 1;
-  transform: translateX(-50%) translateY(0);
-}
-.overlayHint{ margin-top:12px; color:#d5c8a6; font-size:12px; opacity:0.9; }
 
-/* MODALS (GO + GAME OVER) */
+/* Modals */
 .modalOverlay{
   position:fixed;
   inset:0;
@@ -426,34 +225,29 @@ input, textarea, select, button{ font-size:16px; }
   display:flex;
   align-items:center;
   justify-content:center;
-  padding:18px;
   z-index:10000;
 }
 .modalCard{
-  width:min(520px, 94vw);
   border-radius:18px;
-  border:1px solid #ffffff22;
-  background: linear-gradient(180deg, #0b2f43ee 0%, #071f2dee 100%);
-  box-shadow: var(--shadow);
   padding:18px;
-  text-align:center;
-}
-.modalTitle{
-  font-size:22px;
-  font-weight:1000;
-  color: var(--gold);
-  margin-bottom:8px;
-}
-.modalText{
-  color: var(--text);
-  font-weight:800;
-  line-height:1.35;
-  white-space:pre-line;
-  margin-bottom:14px;
 }
 .modalRow{
   display:flex;
   gap:12px;
   justify-content:center;
   flex-wrap:wrap;
+}
+
+/* === iOS SAFARI INPUT ZOOM PREVENTION === */
+/* Safari zooms when input font-size < 16px */
+.nameInput,
+input,
+textarea,
+select {
+  font-size: 16px;
+}
+
+/* Prevent Safari from auto-adjusting text size */
+html {
+  -webkit-text-size-adjust: 100%;
 }

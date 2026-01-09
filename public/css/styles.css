@@ -178,21 +178,25 @@ body{
 }
 
 /* Overlay */
-.overlay{
-  position:fixed;
-  inset:0;
-  background:#000000aa;
+.overlay {
   display:flex;
   align-items:center;
   justify-content:center;
   padding:18px;
   z-index:9999;
 }
-.overlayCard{
+
+/* iOS Safari focus-zoom hard stop */
+#joinOverlay {
+  transform: none !important;
+}
+
+.overlayCard {
   width:min(540px, 95vw);
   border-radius:18px;
   padding:18px;
   box-shadow: var(--shadow);
+}
 }
 .overlayTitle{ font-size:22px; }
 .overlayText{ color:var(--muted); }

@@ -40,19 +40,6 @@ const ticks = el("ticks");
 
 // Show panel
 const showPanel = el("showPanel");
-const cutLine = el("cutLine");
-const ndTitle = el("ndTitle");
-const dTitle = el("dTitle");
-const cTitle = el("cTitle");
-const ndCards = el("ndCards");
-const dCards = el("dCards");
-const cCards = el("cCards");
-const ndBreak = el("ndBreak");
-const dBreak = el("dBreak");
-const cBreak = el("cBreak");
-const ndTotal = el("ndTotal");
-const dTotal = el("dTotal");
-const cTotal = el("cTotal");
 
 // Toast
 const toast = el("toast");
@@ -93,102 +80,85 @@ let lastGameOverShownKey = "";
 let joinMode = null; // "ai" | "pvp"
 let pendingJoin = false;
 
-/* ===================== iOS / WEBKIT STUCK-ZOOM FIX ===================== */
+/* ===================== SAFARI STUCK-ZOOM FIX ===================== */
 
-function isIOSWebKit() {
-  const ua = navigator.userAgent || "";
-  const iOS = /iPad|iPhone|iPod/.test(ua);
-  const webkit = /WebKit/.test(ua);
-  return iOS && webkit;
-}
+const ua = navigator.userAgent || "";
+const isIOS = /iP(hone|od|ad)/.test(ua);
+const isCriOS = /CriOS/.test(ua);
+const isFxiOS = /FxiOS/.test(ua);
+// "Safari" is present in iOS Safari UA; Chrome iOS has CriOS.
+const isIOSSafari = isIOS && /Safari/.test(ua) && !isCriOS && !isFxiOS;
 
-/**
- * "Hammer" fix: toggle the viewport meta to force WebKit to recompute scale.
- * This is the reliable fix when blur/scroll doesn't restore zoom.
- */
-function nukeIosStuckZoom() {
-  if (!isIOSWebKit()) return;
-
-  const meta = document.getElementById("viewportMeta") || document.querySelector('meta[name="viewport"]');
-  if (!meta) return;
-
-  const base = "width=device-width, initial-scale=1, viewport-fit=cover";
-
+function blurActiveElement() {
   try {
-    // Blur anything focused (keyboard + autofill bar)
     if (document.activeElement && typeof document.activeElement.blur === "function") {
       document.activeElement.blur();
     }
     if (nameInput && typeof nameInput.blur === "function") nameInput.blur();
     if (tableInput && typeof tableInput.blur === "function") tableInput.blur();
   } catch (_) {}
-
-  // Step 1: small scale jiggle
-  meta.setAttribute("content", "width=device-width, initial-scale=1.001, viewport-fit=cover");
-
-  // Step 2: restore base after a beat
-  setTimeout(() => {
-    meta.setAttribute("content", base);
-    // Scroll nudge helps iOS snap back
-    try {
-      window.scrollTo(0, 0);
-      document.documentElement.scrollTop = 0;
-      document.body.scrollTop = 0;
-    } catch (_) {}
-  }, 60);
-
-  // Step 3: one more after keyboard animation finishes
-  setTimeout(() => {
-    try {
-      window.scrollTo(0, 0);
-      document.documentElement.scrollTop = 0;
-      document.body.scrollTop = 0;
-    } catch (_) {}
-  }, 220);
 }
 
-/* Keep your existing helper, but make it call the hammer too */
-function hardResetViewport() {
+function forceSafariViewportReflow() {
+  // Only do the meta-viewport toggle on iOS Safari (Chrome iOS already recovers).
+  if (!isIOSSafari) return;
+
   try {
-    if (document.activeElement && typeof document.activeElement.blur === "function") {
-      document.activeElement.blur();
-    }
-    if (nameInput && typeof nameInput.blur === "function") nameInput.blur();
-    if (tableInput && typeof tableInput.blur === "function") tableInput.blur();
+    const m = document.getElementById("viewportMeta") || document.querySelector('meta[name="viewport"]');
+    if (!m) return;
 
-    requestAnimationFrame(() => {
-      window.scrollTo(0, 0);
-      document.documentElement.scrollTop = 0;
-      document.body.scrollTop = 0;
+    const original = m.getAttribute("content") || "width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover";
 
+    // Toggle content to force a reflow/recalc inside WebKit.
+    // The tiny variation is what matters.
+    m.setAttribute("content", "width=device-width, initial-scale=1, viewport-fit=cover");
+    // Next tick: restore
+    setTimeout(() => {
+      m.setAttribute("content", original);
+      // And scroll reset (Safari often snaps after keyboard dismiss)
       setTimeout(() => {
         window.scrollTo(0, 0);
         document.documentElement.scrollTop = 0;
         document.body.scrollTop = 0;
-      }, 120);
-    });
-  } catch (_) {
-    // no-op
-  }
-
-  // Add the hammer at the end
-  nukeIosStuckZoom();
+      }, 50);
+    }, 50);
+  } catch (_) {}
 }
 
-// If Safari viewport changes (keyboard/AutoFill), a later blur+reset helps
-if (window.visualViewport) {
-  window.visualViewport.addEventListener("resize", () => {
+function hardResetViewport() {
+  blurActiveElement();
+
+  requestAnimationFrame(() => {
+    window.scrollTo(0, 0);
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+
+    // Safari-only: viewport toggle reflow
+    forceSafariViewportReflow();
+
+    // One more pass after the keyboard/AutoFill bar finishes animating
     setTimeout(() => {
-      if (document.activeElement && (document.activeElement.tagName || "").toLowerCase() !== "input") {
-        hardResetViewport();
-      }
-    }, 180);
+      blurActiveElement();
+      window.scrollTo(0, 0);
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0;
+      forceSafariViewportReflow();
+    }, 250);
   });
 }
 
-// Also react specifically to input blur (when user finishes typing)
-if (nameInput) nameInput.addEventListener("blur", () => hardResetViewport());
-if (tableInput) tableInput.addEventListener("blur", () => hardResetViewport());
+// If Safari viewport changes (keyboard/AutoFill), a later reset helps
+if (window.visualViewport) {
+  window.visualViewport.addEventListener("resize", () => {
+    setTimeout(() => {
+      // if focus moved off inputs, do a reset
+      const tag = (document.activeElement && document.activeElement.tagName) ? document.activeElement.tagName.toLowerCase() : "";
+      if (tag !== "input" && tag !== "textarea" && tag !== "select") {
+        hardResetViewport();
+      }
+    }, 220);
+  });
+}
 
 /* ===================== PEGGING SCORE QUEUE ===================== */
 
@@ -356,10 +326,8 @@ function maybeShowGoModal() {
   showModal(goModal);
 }
 
-/**
- * ✅ Safety: show Game Over modal even if a game ends outside "show"
- * (server now forces stage="show", but this prevents future deadlocks).
- */
+/* ===================== GAME OVER MODAL ===================== */
+
 function maybeShowGameOverModal() {
   if (!state) return;
   if (!state.gameOver) return;
@@ -457,10 +425,6 @@ function render() {
 
   if (scoreLine) scoreLine.textContent = `${p1} ${state.scores?.PLAYER1 ?? 0} • ${p2} ${state.scores?.PLAYER2 ?? 0}`;
 
-  const mw1 = state.matchWins?.PLAYER1 ?? 0;
-  const mw2 = state.matchWins?.PLAYER2 ?? 0;
-  if (matchLine) matchLine.textContent = `Match (best of 3): ${p1} ${mw1} • ${p2} ${mw2}`;
-
   if (cribLine) {
     const d = playerName(state.dealer);
     const dc1 = state.discardsCount?.PLAYER1 ?? 0;
@@ -471,12 +435,6 @@ function render() {
   initTicksOnce();
   renderBoard();
   renderPileAndHud();
-
-  // reset buttons each render
-  if (discardBtn) discardBtn.style.display = "none";
-  if (goBtn) goBtn.style.display = "none";
-  if (nextHandBtn) nextHandBtn.style.display = "none";
-  if (newMatchBtn) newMatchBtn.style.display = "none";
 
   if (handArea) handArea.innerHTML = "";
 
@@ -494,18 +452,55 @@ function render() {
 
   if (state.stage === "discard") {
     if (showPanel) showPanel.classList.add("hidden");
-    // (unchanged)
+    if (handTitle) handTitle.textContent = "Discard";
+    if (handHelp) handHelp.textContent = "";
+
+    const myHand = state.myHand || [];
+    myHand.forEach(c => {
+      handArea.appendChild(
+        makeCardButton(c, { onClick: () => socket.emit("discard_one", { cardId: c.id }) })
+      );
+    });
+
     return;
   }
 
   if (state.stage === "pegging") {
     if (showPanel) showPanel.classList.add("hidden");
-    // (unchanged)
+
+    if (handTitle) handTitle.textContent = "Pegging";
+    if (handHelp) handHelp.textContent = "Play a card without exceeding 31. If you can’t play, press GO.";
+
+    const myTurn = state.turn === state.me;
+    const myHand = state.myHand || [];
+    const count = state.peg?.count ?? 0;
+
+    myHand.forEach(c => {
+      const playable = myTurn && (count + cardValue(c.rank) <= 31);
+      handArea.appendChild(
+        makeCardButton(c, {
+          disabled: !playable,
+          onClick: () => socket.emit("play_card", { cardId: c.id })
+        })
+      );
+    });
+
+    const canPlay = myHand.some(c => count + cardValue(c.rank) <= 31);
+    if (goBtn) {
+      if (myTurn && myHand.length > 0 && !canPlay) {
+        goBtn.style.display = "inline-block";
+        goBtn.onclick = () => socket.emit("go");
+      } else {
+        goBtn.style.display = "none";
+      }
+    }
+
     return;
   }
 
   if (state.stage === "show") {
-    // (unchanged)
+    clearPeggingPanelsForNonPegging();
+    if (handTitle) handTitle.textContent = "Show";
     return;
   }
 }
@@ -580,7 +575,7 @@ function doJoinFromModeUI() {
   setJoinUiEnabled(false);
   if (entryHint) entryHint.textContent = "Joining…";
 
-  // Blur + hammer fix BEFORE emit (helps iOS “stuck zoom”)
+  // blur/reset before emit
   hardResetViewport();
 
   const vsAI = (joinMode === "ai");
@@ -622,9 +617,13 @@ socket.on("state", (s) => {
   state = s;
 
   if (pendingJoin && joinOverlay) {
+    // hide overlay + reset viewport after the input session ends
     joinOverlay.style.display = "none";
     pendingJoin = false;
     setJoinUiEnabled(true);
+
+    // THE IMPORTANT MOMENT:
+    // overlay disappears -> Safari is most likely to be stuck zoomed
     hardResetViewport();
   }
 
